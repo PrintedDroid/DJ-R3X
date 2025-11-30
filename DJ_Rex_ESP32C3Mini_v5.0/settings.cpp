@@ -79,7 +79,10 @@ void loadSettings() {
     bodyBrightness = preferences.getUChar("bodyBright", 100);
     mouthOuterBoost = preferences.getUChar("mouthOuter", 80);
     mouthInnerBoost = preferences.getUChar("mouthInner", 150);
-    
+
+    // v5.0: Startup sequence setting
+    startupSequenceEnabled = preferences.getBool("startupSeq", STARTUP_SEQUENCE_ENABLED);
+
     // Validate ranges
     if (currentPattern >= NUM_PATTERNS) currentPattern = 16;
     if (ledBrightness == 0) ledBrightness = 90;

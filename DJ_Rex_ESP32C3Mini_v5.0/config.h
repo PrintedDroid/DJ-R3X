@@ -85,6 +85,16 @@
 #define PRESET_NAME_LENGTH 16
 
 // =============================================================================
+// v5.0 NEW: STARTUP SEQUENCE
+// =============================================================================
+#define STARTUP_SEQUENCE_ENABLED true
+#define STARTUP_PHASE_LED_TEST_MS 450
+#define STARTUP_PHASE_EYES_MS 400
+#define STARTUP_PHASE_MOUTH_MS 600
+#define STARTUP_PHASE_SWEEP_MS 1500
+#define STARTUP_PHASE_FLASH_MS 500
+
+// =============================================================================
 // v5.0 NEW: EVENT LOGGER
 // =============================================================================
 #define MAX_LOG_ENTRIES 20

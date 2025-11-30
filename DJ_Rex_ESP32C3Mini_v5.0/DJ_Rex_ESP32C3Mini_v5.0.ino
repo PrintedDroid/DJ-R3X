@@ -191,11 +191,15 @@ void setup() {
     systemMonitor.begin();
     patternManager.begin();
 
-    // v5.0: Run startup sequence
-    startupSequence.begin();
-    while (!startupSequence.isComplete()) {
-        startupSequence.run();
-        delay(10);
+    // v5.0: Run startup sequence if enabled
+    if (startupSequenceEnabled) {
+        startupSequence.begin();
+        while (!startupSequence.isComplete()) {
+            startupSequence.run();
+            delay(10);
+        }
+    } else {
+        Serial.println(F("Startup sequence skipped"));
     }
 
     // v5.0: Create audio task on Core 0

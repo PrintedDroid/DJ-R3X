@@ -7,6 +7,7 @@
 #include "event_logger.h"
 #include "preset_manager.h"
 #include "system_monitor.h"
+#include "pattern_manager.h"
 
 // Serial input buffer
 String inputString = "";
@@ -81,11 +82,16 @@ void printHelp() {
     Serial.println(F("Body Pattern Commands:"));
     Serial.println(F("  S <0-19>           - Set pattern"));
     Serial.println(F("  next/prev          - Navigate patterns"));
+    Serial.println(F("  nextanim           - Next animated pattern"));
+    Serial.println(F("  nextaudio          - Next audio pattern"));
+    Serial.println(F("  random             - Random pattern"));
     Serial.println(F(""));
     Serial.println(F("Playlist Commands:"));
     Serial.println(F("  playlist on/off    - Enable/disable playlist mode"));
     Serial.println(F("  playlist show      - Show current playlist"));
     Serial.println(F("  playlist <p,d;p,d> - Set playlist (e.g., playlist 5,10;12,20)"));
+    Serial.println(F("  playlist save      - Save playlist to flash"));
+    Serial.println(F("  playlist load      - Load playlist from flash"));
     Serial.println(F(""));
     Serial.println(F("Eye Commands:"));
     Serial.println(F("  eyecolor <0-19>    - Set eye color"));
@@ -173,6 +179,8 @@ void printHelp() {
     Serial.println(F("  sysinfo            - Show system status (memory, health)"));
     Serial.println(F("  eventlog           - Show event log"));
     Serial.println(F("  eventlog clear     - Clear event log"));
+    Serial.println(F("  startup [on/off]   - Show/set startup sequence"));
+    Serial.println(F("  restart            - Restart system"));
     Serial.println(F(""));
     Serial.println(F("Patterns:"));
     for (int i = 0; i < NUM_PATTERNS; i++) {
@@ -438,19 +446,44 @@ void processSerialCommand() {
     }
     else if (inputString == "next") {
         uint8_t nextPat = (currentPattern + 1) % NUM_PATTERNS;
-        requestedPattern = nextPat; // Set request
+        requestedPattern = nextPat;
         demoMode = false;
         playlistActive = false;
-        Serial.print(F("Pattern change requested to: "));
-        Serial.println(patternNames[nextPat]);
+        Serial.print(F("Pattern: "));
+        Serial.println(patternManager.getPatternName(nextPat));
     }
     else if (inputString == "prev") {
         uint8_t prevPat = (currentPattern == 0) ? NUM_PATTERNS - 1 : currentPattern - 1;
-        requestedPattern = prevPat; // Set request
+        requestedPattern = prevPat;
         demoMode = false;
         playlistActive = false;
-        Serial.print(F("Pattern change requested to: "));
-        Serial.println(patternNames[prevPat]);
+        Serial.print(F("Pattern: "));
+        Serial.println(patternManager.getPatternName(prevPat));
+    }
+    // v5.0: Category-based navigation
+    else if (inputString == "nextanim") {
+        uint8_t nextPat = patternManager.getNextInCategory(CAT_ANIMATED, currentPattern);
+        requestedPattern = nextPat;
+        demoMode = false;
+        playlistActive = false;
+        Serial.print(F("Next animated: "));
+        Serial.println(patternManager.getPatternName(nextPat));
+    }
+    else if (inputString == "nextaudio") {
+        uint8_t nextPat = patternManager.getNextInCategory(CAT_AUDIO, currentPattern);
+        requestedPattern = nextPat;
+        demoMode = false;
+        playlistActive = false;
+        Serial.print(F("Next audio: "));
+        Serial.println(patternManager.getPatternName(nextPat));
+    }
+    else if (inputString == "random") {
+        uint8_t randPat = patternManager.getRandomPattern(true);
+        requestedPattern = randPat;
+        demoMode = false;
+        playlistActive = false;
+        Serial.print(F("Random: "));
+        Serial.println(patternManager.getPatternName(randPat));
     }
     // Eye flicker commands
     else if (inputString == "eyeflicker on") {
@@ -1124,6 +1157,59 @@ else if (inputString.startsWith("eyecolor ")) {
     else if (inputString == "eventlog clear") {
         eventLogger.clear();
         Serial.println(F("Event log cleared"));
+    }
+    // v5.0: Startup Sequence control
+    else if (inputString == "startup on") {
+        startupSequenceEnabled = true;
+        preferences.putBool("startupSeq", true);
+        Serial.println(F("Startup sequence enabled (next boot)"));
+    }
+    else if (inputString == "startup off") {
+        startupSequenceEnabled = false;
+        preferences.putBool("startupSeq", false);
+        Serial.println(F("Startup sequence disabled (next boot)"));
+    }
+    else if (inputString == "startup") {
+        Serial.print(F("Startup sequence: "));
+        Serial.println(startupSequenceEnabled ? "ON" : "OFF");
+    }
+    // v5.0: Manual restart
+    else if (inputString == "restart") {
+        Serial.println(F("Restarting in 2 seconds..."));
+        delay(2000);
+        ESP.restart();
+    }
+    // v5.0: Playlist persistence
+    else if (inputString == "playlist save") {
+        // Save playlist to flash
+        preferences.putUChar("plSize", playlistSize);
+        for (int i = 0; i < playlistSize; i++) {
+            String keyPat = "pl" + String(i) + "p";
+            String keyDur = "pl" + String(i) + "d";
+            preferences.putUChar(keyPat.c_str(), playlist[i].pattern);
+            preferences.putUShort(keyDur.c_str(), playlist[i].duration);
+        }
+        Serial.print(F("Playlist saved ("));
+        Serial.print(playlistSize);
+        Serial.println(F(" entries)"));
+    }
+    else if (inputString == "playlist load") {
+        // Load playlist from flash
+        uint8_t savedSize = preferences.getUChar("plSize", 0);
+        if (savedSize > 0 && savedSize <= 10) {
+            playlistSize = savedSize;
+            for (int i = 0; i < playlistSize; i++) {
+                String keyPat = "pl" + String(i) + "p";
+                String keyDur = "pl" + String(i) + "d";
+                playlist[i].pattern = preferences.getUChar(keyPat.c_str(), 1);
+                playlist[i].duration = preferences.getUShort(keyDur.c_str(), 10);
+            }
+            Serial.print(F("Playlist loaded ("));
+            Serial.print(playlistSize);
+            Serial.println(F(" entries)"));
+        } else {
+            Serial.println(F("No saved playlist found"));
+        }
     }
     // =====================================================
     else {
