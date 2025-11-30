@@ -265,75 +265,68 @@ uint32_t failedCommands = 0;
 // Hardware validation function
 void validateHardwareConfiguration() {
     Serial.println(F("=== Hardware Configuration Validation ==="));
-    
+
     // Validate LED array pointers
     Serial.print(F("Body LEDs total: "));
     Serial.println(TOTAL_BODY_LEDS);
-    
+
     Serial.print(F("Right panel pointer: "));
     Serial.print((uintptr_t)DJLEDs_Right, HEX);
     Serial.print(F(" (offset: "));
     Serial.print(DJLEDs_Right - bodyLEDsChained);
     Serial.println(F(")"));
-    
+
     Serial.print(F("Middle panel pointer: "));
     Serial.print((uintptr_t)DJLEDs_Middle, HEX);
     Serial.print(F(" (offset: "));
     Serial.print(DJLEDs_Middle - bodyLEDsChained);
     Serial.println(F(")"));
-    
+
     Serial.print(F("Left panel pointer: "));
     Serial.print((uintptr_t)DJLEDs_Left, HEX);
     Serial.print(F(" (offset: "));
     Serial.print(DJLEDs_Left - bodyLEDsChained);
     Serial.println(F(")"));
-    
-    Serial.print(F("Mouth pointer: "));
+
+    Serial.print(F("Mouth array: "));
     Serial.print((uintptr_t)DJLEDs_Mouth, HEX);
-    Serial.print(F(" (offset: "));
-    Serial.print(DJLEDs_Mouth - eyesMouthLEDs);
-    Serial.println(F(")"));
-    
-    Serial.print(F("Eyes pointer: "));
+    Serial.print(F(" ("));
+    Serial.print(NUM_MOUTH_LEDS);
+    Serial.println(F(" LEDs on IO7)"));
+
+    Serial.print(F("Eyes array: "));
     Serial.print((uintptr_t)DJLEDs_Eyes, HEX);
-    Serial.print(F(" (offset: "));
-    Serial.print(DJLEDs_Eyes - eyesMouthLEDs);
-    Serial.println(F(")"));
-    
+    Serial.print(F(" ("));
+    Serial.print(NUM_EYES);
+    Serial.println(F(" LEDs on IO6)"));
+
     // Validate array bounds
     bool validConfig = true;
-    
+
     if (DJLEDs_Right != &bodyLEDsChained[0]) {
         Serial.println(F("ERROR: Right panel pointer incorrect"));
         validConfig = false;
     }
-    
+
     if (DJLEDs_Middle != &bodyLEDsChained[NUM_LEDS_PER_PANEL]) {
         Serial.println(F("ERROR: Middle panel pointer incorrect"));
         validConfig = false;
     }
-    
+
     if (DJLEDs_Left != &bodyLEDsChained[NUM_LEDS_PER_PANEL * 2]) {
         Serial.println(F("ERROR: Left panel pointer incorrect"));
         validConfig = false;
     }
-    
-    if (DJLEDs_Mouth != &eyesMouthLEDs[0]) {
-        Serial.println(F("ERROR: Mouth pointer incorrect"));
-        validConfig = false;
-    }
-    
-    if (DJLEDs_Eyes != &eyesMouthLEDs[NUM_MOUTH_LEDS]) {
-        Serial.println(F("ERROR: Eyes pointer incorrect"));
-        validConfig = false;
-    }
-    
+
+    // Eyes and Mouth are now separate arrays, not pointers - always valid
+    Serial.println(F("Eyes and Mouth: Separate arrays (IO6, IO7)"));
+
     Serial.print(F("Hardware configuration: "));
     Serial.println(validConfig ? "VALID" : "INVALID");
-    
+
     if (!validConfig) {
         Serial.println(F("CRITICAL: Hardware configuration errors detected!"));
     }
-    
+
     Serial.println(F("========================================"));
 }
