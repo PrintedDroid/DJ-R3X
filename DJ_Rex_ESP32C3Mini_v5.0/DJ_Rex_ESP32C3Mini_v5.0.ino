@@ -90,6 +90,11 @@
 
 #include <FastLED.h>
 #include <Preferences.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
+#include <esp_system.h>
+
 #include "config.h"
 #include "globals.h"
 #include "patterns_body.h"
@@ -101,8 +106,34 @@
 #include "audio.h"
 #include "demo.h"
 
+// v5.0 New modules
+#include "event_logger.h"
+#include "preset_manager.h"
+#include "system_monitor.h"
+
 // Combined LED array for Eyes + Mouth
 CRGB eyesMouthLEDs[NUM_EYES + NUM_MOUTH_LEDS];
+
+// v5.0: FreeRTOS handles
+#if ENABLE_FREERTOS_AUDIO
+TaskHandle_t audioTaskHandle = NULL;
+SemaphoreHandle_t ledMutex = NULL;
+#endif
+
+// v5.0: Audio task running on Core 0
+#if ENABLE_FREERTOS_AUDIO
+void audioTask(void* parameter) {
+    const TickType_t xFrequency = pdMS_TO_TICKS(AUDIO_SAMPLE_INTERVAL_MS);
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+
+    Serial.println(F("Audio task started on Core 0"));
+
+    for (;;) {
+        updateAudio();
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    }
+}
+#endif
 
 void setup() {
     Serial.begin(115200);
@@ -110,34 +141,69 @@ void setup() {
     while (!Serial) {
         delay(10);
     }
-    
+
     Serial.println(F("Starting..."));
     Serial.flush();
 
-    Serial.println(F("Printed-Droid DJ Rex v5.0.0 - Enhanced Edition"));
-    Serial.println(F("==============================================="));
-    Serial.println(F("ESP32-C3 Mini | Base: v3.1 + v4.2 Features"));
-    
+    Serial.println(F(""));
+    Serial.println(F("=============================================="));
+    Serial.println(F("  Printed-Droid DJ Rex v5.0.0"));
+    Serial.println(F("  Enhanced Edition"));
+    Serial.println(F("=============================================="));
+    Serial.println(F("  Base: v3.1 + v4.2 Features"));
+    Serial.println(F("  Build: " FIRMWARE_DATE));
+    Serial.println(F("=============================================="));
+
     analogReadResolution(12);
     analogSetAttenuation(ADC_11db);
-    
+
+    // v5.0: Create LED mutex for thread safety
+    #if ENABLE_FREERTOS_AUDIO
+    ledMutex = xSemaphoreCreateMutex();
+    if (ledMutex == NULL) {
+        Serial.println(F("ERROR: Failed to create LED mutex!"));
+    } else {
+        Serial.println(F("LED mutex created"));
+    }
+    #endif
+
     initSettings();
-    
+
     FastLED.addLeds<LED_TYPE, LED_PIN_RIGHT, COLOR_ORDER>(DJLEDs_Right, NUM_LEDS_PER_PANEL);
     FastLED.addLeds<LED_TYPE, LED_PIN_MIDDLE, COLOR_ORDER>(DJLEDs_Middle, NUM_LEDS_PER_PANEL);
     FastLED.addLeds<LED_TYPE, LED_PIN_LEFT, COLOR_ORDER>(DJLEDs_Left, NUM_LEDS_PER_PANEL);
     FastLED.addLeds<LED_TYPE, EYES_MOUTH_PIN, COLOR_ORDER>(eyesMouthLEDs, NUM_EYES + NUM_MOUTH_LEDS);
-    
+
     FastLED.setBrightness(ledBrightness);
-    
+
     FastLED.clear();
     FastLED.show();
 
     initializeHelpers();
     initializeEyes();
     initializeAudio();
-    
+
+    // v5.0: Initialize new modules
+    eventLogger.begin();
+    presetManager.begin();
+    systemMonitor.begin();
+
+    // v5.0: Create audio task on Core 0
+    #if ENABLE_FREERTOS_AUDIO
+    xTaskCreatePinnedToCore(
+        audioTask,
+        "AudioTask",
+        AUDIO_TASK_STACK_SIZE,
+        NULL,
+        AUDIO_TASK_PRIORITY,
+        &audioTaskHandle,
+        0  // Core 0
+    );
+    #endif
+
+    Serial.println(F(""));
     Serial.println(F("System ready! Type 'help' for commands."));
+    Serial.println(F(""));
     printCurrentSettings();
 }
 
@@ -212,43 +278,58 @@ void handlePlaylist() {
 }
 
 void loop() {
+    // v5.0: System monitoring update
+    systemMonitor.update();
+
     handlePlaylist();
 
     // Check for manual pattern change requests
     if (requestedPattern != -1) {
+        // v5.0: Log pattern change
+        eventLogger.log(EVENT_PATTERN_CHANGE, requestedPattern);
         startTransition(requestedPattern);
         requestedPattern = -1; // Reset request
     }
-    
+
     if (checkSerialCommand()) {
         processSerialCommand();
     }
-    
+
     if (demoMode) {
         handleDemoMode();
     }
-    
+
     // Always run the current pattern logic
     gPatterns[currentPattern]();
-    
+
     if (currentPattern != 0) {
         updateEyes();
     }
-    
+
     if (mouthEnabled && currentPattern != 0) {
         updateMouth();
     }
 
     // After calculating the new pattern, apply the transition blend if active
     handleTransition();
-    
+
     static unsigned long LEDUpdateMillis = 0;
     if (millis() - LEDUpdateMillis > 20) {
         LEDUpdateMillis = millis();
+
+        // v5.0: Thread-safe LED update with mutex
+        #if ENABLE_FREERTOS_AUDIO
+        if (ledMutex != NULL && xSemaphoreTake(ledMutex, pdMS_TO_TICKS(LED_MUTEX_TIMEOUT_MS)) == pdTRUE) {
+            mapEyesMouthArrays();
+            FastLED.show();
+            xSemaphoreGive(ledMutex);
+        }
+        #else
         mapEyesMouthArrays();
         FastLED.show();
+        #endif
     }
-    
+
     EVERY_N_MILLISECONDS(20) {
         gHue++;
     }

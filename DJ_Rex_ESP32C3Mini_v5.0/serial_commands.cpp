@@ -3,6 +3,11 @@
 #include "helpers.h"
 #include "eyes.h"  // Added for printEyeFlickerSettings()
 
+// v5.0: New module includes
+#include "event_logger.h"
+#include "preset_manager.h"
+#include "system_monitor.h"
+
 // Serial input buffer
 String inputString = "";
 boolean stringComplete = false;
@@ -72,7 +77,7 @@ bool checkSerialCommand() {
 }
 
 void printHelp() {
-    Serial.println(F("\n=== DJ Rex v3.1 - Command Reference ==="));
+    Serial.println(F("\n=== DJ Rex v5.0 - Command Reference ==="));
     Serial.println(F("Body Pattern Commands:"));
     Serial.println(F("  S <0-16>           - Set pattern"));
     Serial.println(F("  next/prev          - Navigate patterns"));
@@ -152,11 +157,22 @@ void printHelp() {
     Serial.println(F("  status             - Show settings"));
     Serial.println(F("  help               - This help"));
     Serial.println(F(""));
-    Serial.println(F("User Presets:"));
+    Serial.println(F("User Presets (v3.1 legacy):"));
     Serial.println(F("  saveuser <1-3>     - Save current setup as user preset"));
     Serial.println(F("  loaduser <1-3>     - Load user preset"));
     Serial.println(F("  deleteuser <1-3>   - Delete user preset"));
     Serial.println(F("  listpresets        - Show saved presets"));
+    Serial.println(F(""));
+    Serial.println(F("v5.0 Extended Presets (10 slots):"));
+    Serial.println(F("  preset save <1-10> [name] - Save preset with optional name"));
+    Serial.println(F("  preset load <1-10> - Load preset"));
+    Serial.println(F("  preset delete <1-10> - Delete preset"));
+    Serial.println(F("  preset list        - Show all presets"));
+    Serial.println(F(""));
+    Serial.println(F("v5.0 System Monitoring:"));
+    Serial.println(F("  sysinfo            - Show system status (memory, health)"));
+    Serial.println(F("  eventlog           - Show event log"));
+    Serial.println(F("  eventlog clear     - Clear event log"));
     Serial.println(F(""));
     Serial.println(F("Patterns:"));
     for (int i = 0; i < NUM_PATTERNS; i++) {
@@ -1054,6 +1070,62 @@ else if (inputString.startsWith("eyecolor ")) {
         }
         Serial.println(F("===================\n"));
     }
+    // =====================================================
+    // v5.0 NEW COMMANDS
+    // =====================================================
+    // v5.0: Extended Preset Manager (10 slots)
+    else if (inputString.startsWith("preset save ")) {
+        String args = inputString.substring(12);
+        int spacePos = args.indexOf(' ');
+        int slot;
+        String name = "";
+        if (spacePos > 0) {
+            slot = args.substring(0, spacePos).toInt();
+            name = args.substring(spacePos + 1);
+        } else {
+            slot = args.toInt();
+        }
+        if (slot >= 1 && slot <= MAX_PRESETS) {
+            presetManager.savePreset(slot - 1, name.length() > 0 ? name.c_str() : nullptr);
+        } else {
+            Serial.print(F("Invalid slot! Use 1-"));
+            Serial.println(MAX_PRESETS);
+        }
+    }
+    else if (inputString.startsWith("preset load ")) {
+        int slot = inputString.substring(12).toInt();
+        if (slot >= 1 && slot <= MAX_PRESETS) {
+            presetManager.loadPreset(slot - 1);
+        } else {
+            Serial.print(F("Invalid slot! Use 1-"));
+            Serial.println(MAX_PRESETS);
+        }
+    }
+    else if (inputString.startsWith("preset delete ")) {
+        int slot = inputString.substring(14).toInt();
+        if (slot >= 1 && slot <= MAX_PRESETS) {
+            presetManager.deletePreset(slot - 1);
+        } else {
+            Serial.print(F("Invalid slot! Use 1-"));
+            Serial.println(MAX_PRESETS);
+        }
+    }
+    else if (inputString == "preset list") {
+        presetManager.listPresets();
+    }
+    // v5.0: System Monitoring
+    else if (inputString == "sysinfo") {
+        systemMonitor.printStatus();
+    }
+    // v5.0: Event Logger
+    else if (inputString == "eventlog") {
+        eventLogger.printLog();
+    }
+    else if (inputString == "eventlog clear") {
+        eventLogger.clear();
+        Serial.println(F("Event log cleared"));
+    }
+    // =====================================================
     else {
         Serial.print(F("Unknown: "));
         Serial.println(inputString);
