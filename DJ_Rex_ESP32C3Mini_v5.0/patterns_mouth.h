@@ -13,6 +13,11 @@ void mouthAudioReactive();
 void mouthRainbow();
 void mouthDebug();
 
+// v5.0: New mouth patterns
+void mouthMatrix();
+void mouthHeartbeat();
+void mouthSpectrum();
+
 // Helper function for brightness compensation
 CRGB adjustMouthBrightness(CRGB color, int row, int ledInRow);
 

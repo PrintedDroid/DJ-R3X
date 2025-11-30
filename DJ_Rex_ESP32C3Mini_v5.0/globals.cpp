@@ -182,7 +182,8 @@ const char* SideColorModeNames[5] = {
 
 const char* MouthPatternNames[NUM_MOUTH_PATTERNS] = {
     "Off", "Talk", "Smile", "Audio Reactive", "Rainbow", "Debug",
-    "Wave", "Pulse", "VU Meter Horiz", "VU Meter Vert", "Frown", "Sparkle"
+    "Wave", "Pulse", "VU Meter Horiz", "VU Meter Vert", "Frown", "Sparkle",
+    "Matrix", "Heartbeat", "Spectrum"  // v5.0 new patterns
 };
 
 const char* EyeModeNames[3] = {
@@ -200,5 +201,6 @@ const char* AudioModeNames[5] = {
 const char* patternNames[NUM_PATTERNS] = {
     "LEDs Off", "Random Blocks", "Solid Color", "Short Circuit", "Confetti Red/White", "Rainbow", "Rainbow with Glitter",
     "Confetti", "Juggle", "Audio Sync", "Solid Flash", "Knight Rider", "Breathing", "Matrix Rain", "Strobe",
-    "Audio VU Meter", "Custom Block Sequence"
+    "Audio VU Meter", "Custom Block Sequence",
+    "Plasma", "Fire", "Twinkle"  // v5.0 new patterns
 };

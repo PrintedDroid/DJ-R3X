@@ -23,6 +23,11 @@ void strobePattern();
 void audioVUMeter();
 void CustomBlockSequence();
 
+// v5.0: New patterns
+void plasmaPattern();
+void firePattern();
+void twinklePattern();
+
 // Helper for rainbow
 void addGlitter(fract8 chanceOfGlitter);
 

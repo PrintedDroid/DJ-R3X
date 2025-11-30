@@ -57,7 +57,7 @@ void mouthSparkle();
 
 
 void updateMouth() {
-    // The main switch now includes all 12 patterns
+    // The main switch now includes all 15 patterns
     switch (mouthPattern) {
         case 0: mouthOff(); break;
         case 1: mouthTalk(); break;
@@ -71,6 +71,10 @@ void updateMouth() {
         case 9: mouthVUMeterVert(); break;
         case 10: mouthFrown(); break;
         case 11: mouthSparkle(); break;
+        // v5.0: New patterns
+        case 12: mouthMatrix(); break;
+        case 13: mouthHeartbeat(); break;
+        case 14: mouthSpectrum(); break;
     }
 }
 
@@ -353,5 +357,132 @@ void mouthDebug() {
                 }
             }
             break;
+    }
+}
+
+// =====================================================
+// v5.0 NEW MOUTH PATTERNS
+// =====================================================
+
+void mouthMatrix() {
+    // Matrix-style falling effect
+    static uint8_t matrixDrops[8];  // For each column
+    static uint8_t matrixBright[8];
+    static unsigned long lastMatrixUpdate = 0;
+
+    if (millis() - lastMatrixUpdate > 80) {
+        lastMatrixUpdate = millis();
+
+        // Shift drops down
+        for (int col = 0; col < 8; col++) {
+            if (matrixBright[col] > 0) {
+                matrixDrops[col]++;
+                matrixBright[col] = matrixBright[col] > 30 ? matrixBright[col] - 30 : 0;
+            }
+
+            // Randomly start new drops
+            if (matrixDrops[col] >= MOUTH_ROWS || matrixBright[col] == 0) {
+                if (random8() < 40) {
+                    matrixDrops[col] = 0;
+                    matrixBright[col] = 255;
+                }
+            }
+        }
+    }
+
+    fadeToBlackBy(DJLEDs_Mouth, NUM_MOUTH_LEDS, 30);
+
+    CRGB matrixColor = getMouthColor(0, 0);
+
+    for (int col = 0; col < 8; col++) {
+        int row = matrixDrops[col];
+        if (row < MOUTH_ROWS && matrixBright[col] > 0) {
+            int ledIdx = mouthRowStart[row] + min(col, mouthRowLeds[row] - 1);
+            CRGB color = matrixColor;
+            color.fadeToBlackBy(255 - matrixBright[col]);
+            color.fadeToBlackBy(255 - mouthBrightness);
+            DJLEDs_Mouth[ledIdx] = adjustMouthBrightness(color, row, col);
+        }
+    }
+}
+
+void mouthHeartbeat() {
+    // Heartbeat pulse effect - double pulse
+    static uint8_t beatPhase = 0;
+    static unsigned long lastBeatUpdate = 0;
+
+    uint16_t beatInterval = 50;
+
+    if (millis() - lastBeatUpdate > beatInterval) {
+        lastBeatUpdate = millis();
+        beatPhase = (beatPhase + 1) % 40;
+    }
+
+    // Create heartbeat pattern (two quick pulses, then pause)
+    uint8_t brightness = 0;
+    if (beatPhase < 4) {
+        brightness = beatPhase * 60;  // First pulse up
+    } else if (beatPhase < 8) {
+        brightness = 240 - (beatPhase - 4) * 60;  // First pulse down
+    } else if (beatPhase < 12) {
+        brightness = (beatPhase - 8) * 50;  // Second pulse up
+    } else if (beatPhase < 16) {
+        brightness = 200 - (beatPhase - 12) * 50;  // Second pulse down
+    }
+    // Phase 16-40: pause (brightness stays 0)
+
+    for (int row = 0; row < MOUTH_ROWS; row++) {
+        for (int i = 0; i < mouthRowLeds[row]; i++) {
+            CRGB heartColor = getMouthColor(row, i);
+            heartColor.fadeToBlackBy(255 - brightness);
+            heartColor.fadeToBlackBy(255 - mouthBrightness);
+            DJLEDs_Mouth[mouthRowStart[row] + i] = adjustMouthBrightness(heartColor, row, i);
+        }
+    }
+}
+
+void mouthSpectrum() {
+    // Audio spectrum analyzer visualization
+    int audio = processAudioLevel();
+    if (audioMode == AUDIO_OFF) audio = 0;
+
+    fadeToBlackBy(DJLEDs_Mouth, NUM_MOUTH_LEDS, 40);
+
+    // Create pseudo-spectrum with different frequency bands
+    static uint8_t bands[8];
+    static uint8_t targets[8];
+    static unsigned long lastSpectrumUpdate = 0;
+
+    if (millis() - lastSpectrumUpdate > 30) {
+        lastSpectrumUpdate = millis();
+
+        // Update targets based on audio
+        for (int i = 0; i < 8; i++) {
+            // Simulate different frequency bands with some variation
+            int bandLevel = audio + random8(20) - 10;
+            bandLevel = constrain(bandLevel, 0, audioThreshold);
+            targets[i] = map(bandLevel, 0, audioThreshold, 0, MOUTH_ROWS);
+
+            // Smooth transition
+            if (bands[i] < targets[i]) {
+                bands[i]++;
+            } else if (bands[i] > targets[i]) {
+                bands[i]--;
+            }
+        }
+    }
+
+    // Draw spectrum bars
+    for (int col = 0; col < 8; col++) {
+        int level = bands[col];
+
+        for (int row = MOUTH_ROWS - 1; row >= MOUTH_ROWS - level; row--) {
+            if (row >= 0 && row < MOUTH_ROWS && col < mouthRowLeds[row]) {
+                // Color based on level (green->yellow->red)
+                uint8_t hue = map(MOUTH_ROWS - 1 - row, 0, MOUTH_ROWS, 96, 0);
+                CRGB specColor = CHSV(hue, 255, mouthBrightness);
+                DJLEDs_Mouth[mouthRowStart[row] + col] = adjustMouthBrightness(specColor, row, col);
+            }
+        }
     }
 }

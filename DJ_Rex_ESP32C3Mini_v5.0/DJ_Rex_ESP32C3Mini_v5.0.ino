@@ -110,6 +110,8 @@
 #include "event_logger.h"
 #include "preset_manager.h"
 #include "system_monitor.h"
+#include "pattern_manager.h"
+#include "startup_sequence.h"
 
 // Combined LED array for Eyes + Mouth
 CRGB eyesMouthLEDs[NUM_EYES + NUM_MOUTH_LEDS];
@@ -187,6 +189,14 @@ void setup() {
     eventLogger.begin();
     presetManager.begin();
     systemMonitor.begin();
+    patternManager.begin();
+
+    // v5.0: Run startup sequence
+    startupSequence.begin();
+    while (!startupSequence.isComplete()) {
+        startupSequence.run();
+        delay(10);
+    }
 
     // v5.0: Create audio task on Core 0
     #if ENABLE_FREERTOS_AUDIO

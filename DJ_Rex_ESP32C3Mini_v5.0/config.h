@@ -42,7 +42,7 @@
 
 // Mouth layout
 #define MOUTH_ROWS 12
-#define NUM_MOUTH_PATTERNS 12
+#define NUM_MOUTH_PATTERNS 15  // v5.0: Added Matrix, Heartbeat, Spectrum
 
 // Color configuration
 #define NUM_STANDARD_COLORS 20
@@ -111,6 +111,6 @@ enum AudioMode {
 };
 
 // Pattern count
-#define NUM_PATTERNS 17
+#define NUM_PATTERNS 20  // v5.0: Added Plasma, Fire, Twinkle
 
 #endif
