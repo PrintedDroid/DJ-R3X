@@ -1,74 +1,66 @@
 #include "demo.h"
 #include "helpers.h"
 
+// v5.0: Extended demo patterns list (skip Off pattern and some less interesting ones)
+static const uint8_t demoBodyPatterns[] = {
+    1,  // Random Blocks
+    5,  // Rainbow
+    6,  // Rainbow Glitter
+    7,  // Confetti
+    8,  // Juggle
+    11, // Knight Rider
+    12, // Breathing
+    13, // Matrix Rain
+    17, // Plasma (v5.0)
+    18, // Fire (v5.0)
+    19, // Twinkle (v5.0)
+    9,  // Audio Sync
+    15  // Audio VU Meter
+};
+static const uint8_t numDemoBodyPatterns = sizeof(demoBodyPatterns) / sizeof(demoBodyPatterns[0]);
+
+// v5.0: Extended mouth demo patterns
+static const uint8_t demoMouthPatterns[] = {
+    1,  // Talk
+    2,  // Smile
+    4,  // Rainbow
+    6,  // Wave
+    7,  // Pulse
+    11, // Sparkle
+    12, // Matrix (v5.0)
+    13, // Heartbeat (v5.0)
+    3,  // Audio Reactive
+    14  // Spectrum (v5.0)
+};
+static const uint8_t numDemoMouthPatterns = sizeof(demoMouthPatterns) / sizeof(demoMouthPatterns[0]);
+
 void handleDemoMode() {
     if (!demoMode) return;
-    
+
     if (millis() - lastDemoChange >= (demoTime * 1000UL)) {
         lastDemoChange = millis();
         demoStep++;
-        
-        // Patterns with color variations
-        if ((demoPatternIndex == 2 || demoPatternIndex == 3 || demoPatternIndex == 4 || 
-             demoPatternIndex == 10 || demoPatternIndex == 11 || demoPatternIndex == 12 ||
-             demoPatternIndex == 13 || demoPatternIndex == 14) && demoColorIndex < 9) {
-            demoColorIndex++;
-            
-            if (demoPatternIndex == 2) {
-                solidColorIndex = demoColorIndex;
-                Serial.print(F("Demo: Solid Color - "));
-                Serial.println(ColorNames[demoColorIndex]);
-            } else if (demoPatternIndex == 3) {
-                shortColorIndex = demoColorIndex;
-                Serial.print(F("Demo: Short Circuit - "));
-                Serial.println(ColorNames[demoColorIndex]);
-            } else if (demoPatternIndex == 4) {
-                confettiColor1 = demoColorIndex;
-                confettiColor2 = (demoColorIndex + 1) % 10;
-                Serial.print(F("Demo: Confetti - "));
-                Serial.print(ColorNames[demoColorIndex]);
-                Serial.print(F(" + "));
-                Serial.println(ColorNames[confettiColor2]);
-            } else if (demoPatternIndex == 10) {
-                flashColorIndex = demoColorIndex;
-                Serial.print(F("Demo: Solid Flash - "));
-                Serial.println(ColorNames[demoColorIndex]);
-            } else if (demoPatternIndex == 11) {
-                knightColorIndex = demoColorIndex;
-                Serial.print(F("Demo: Knight Rider - "));
-                Serial.println(ColorNames[demoColorIndex]);
-            } else if (demoPatternIndex == 12) {
-                breathingColorIndex = demoColorIndex;
-                Serial.print(F("Demo: Breathing - "));
-                Serial.println(ColorNames[demoColorIndex]);
-            } else if (demoPatternIndex == 13) {
-                matrixColorIndex = demoColorIndex;
-                Serial.print(F("Demo: Matrix Rain - "));
-                Serial.println(ColorNames[demoColorIndex]);
-            } else if (demoPatternIndex == 14) {
-                strobeColorIndex = demoColorIndex;
-                Serial.print(F("Demo: Strobe - "));
-                Serial.println(ColorNames[demoColorIndex]);
-            }
-        } else {
-            // Move to next pattern
-            demoColorIndex = 0;
-            demoPatternIndex++;
-            
-            if (demoPatternIndex >= NUM_PATTERNS) {
-                demoPatternIndex = 1;
-            }
-            
-            currentPattern = demoPatternIndex;
-            Serial.print(F("Demo: "));
-            Serial.println(patternNames[demoPatternIndex]);
-        }
-        
-        // Cycle mouth patterns too
+
+        // Cycle through demo body patterns
+        static uint8_t bodyDemoIndex = 0;
+        bodyDemoIndex = (bodyDemoIndex + 1) % numDemoBodyPatterns;
+        currentPattern = demoBodyPatterns[bodyDemoIndex];
+
+        Serial.print(F("Demo: "));
+        Serial.println(patternNames[currentPattern]);
+
+        // Cycle mouth patterns with body patterns
         static uint8_t mouthDemoIndex = 0;
-        mouthDemoIndex = (mouthDemoIndex + 1) % 5;
-        mouthPattern = mouthDemoIndex;
+        mouthDemoIndex = (mouthDemoIndex + 1) % numDemoMouthPatterns;
+        mouthPattern = demoMouthPatterns[mouthDemoIndex];
+
         Serial.print(F("  Mouth: "));
         Serial.println(MouthPatternNames[mouthPattern]);
+
+        // Vary colors every few cycles
+        if (demoStep % 3 == 0) {
+            solidColorIndex = random8(NUM_STANDARD_COLORS - 1);
+            mouthColorIndex = random8(NUM_STANDARD_COLORS - 1);
+        }
     }
 }

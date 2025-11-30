@@ -207,4 +207,7 @@ extern unsigned long playlistPatternStartTime;
 typedef void (*SimplePatternList[])();
 extern SimplePatternList gPatterns;
 
+// v5.0: Startup sequence control
+extern bool startupSequenceEnabled;
+
 #endif

@@ -1,10 +1,15 @@
 // system_monitor.cpp - v5.0 System Health & Memory Monitoring
 #include "system_monitor.h"
 #include "event_logger.h"
+#include "globals.h"
 #include <Arduino.h>
 #include <esp_system.h>
 
 SystemMonitor systemMonitor;
+
+// Safe pattern to switch to on critical errors (0 = LEDs Off)
+#define SAFE_PATTERN 0
+#define AUTO_RESTART_THRESHOLD 10
 
 void SystemMonitor::begin() {
     minFreeHeap = ESP.getFreeHeap();
@@ -90,9 +95,25 @@ void SystemMonitor::checkHealth() {
         consecutiveErrors = 0;
     } else {
         consecutiveErrors++;
+
+        // Auto-recovery: switch to safe pattern on critical errors
         if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-            Serial.println(F("CRITICAL: Too many consecutive errors!"));
+            Serial.println(F("CRITICAL: Switching to safe mode!"));
             eventLogger.log(EVENT_ERROR, consecutiveErrors);
+
+            // Switch to safe pattern (LEDs Off)
+            currentPattern = SAFE_PATTERN;
+            demoMode = false;
+            playlistActive = false;
+
+            Serial.println(F("Safe mode activated - LEDs Off"));
+        }
+
+        // Auto-restart after too many errors
+        if (consecutiveErrors >= AUTO_RESTART_THRESHOLD) {
+            Serial.println(F("CRITICAL: System restart in 3 seconds..."));
+            delay(3000);
+            ESP.restart();
         }
     }
 }

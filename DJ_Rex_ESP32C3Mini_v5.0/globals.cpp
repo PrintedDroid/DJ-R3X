@@ -204,3 +204,6 @@ const char* patternNames[NUM_PATTERNS] = {
     "Audio VU Meter", "Custom Block Sequence",
     "Plasma", "Fire", "Twinkle"  // v5.0 new patterns
 };
+
+// v5.0: Startup sequence control
+bool startupSequenceEnabled = STARTUP_SEQUENCE_ENABLED;
