@@ -20,7 +20,11 @@ SimplePatternList gPatterns = {
     matrixRain,        // 13
     strobePattern,     // 14
     audioVUMeter,      // 15
-    CustomBlockSequence // 16
+    CustomBlockSequence, // 16
+    // v5.0: New patterns
+    plasmaPattern,     // 17
+    firePattern,       // 18
+    twinklePattern     // 19
 };
 
 void LEDsOff() {
@@ -538,6 +542,88 @@ void CustomBlockSequence() {
                     LEDOn[timingIdx] = 0;
                 }
             }
+        }
+    }
+}
+
+// =====================================================
+// v5.0 NEW PATTERNS
+// =====================================================
+
+void plasmaPattern() {
+    // Flowing plasma effect using sin waves
+    static uint16_t plasmaTime = 0;
+    plasmaTime += effectSpeed / 4;
+
+    for (int panel = 0; panel < 3; panel++) {
+        CRGB* leds = getLEDArray(panel);
+
+        for (int i = 0; i < NUM_LEDS_PER_PANEL; i++) {
+            // Multiple overlapping sin waves for plasma effect
+            uint8_t hue = sin8(i * 15 + plasmaTime / 2) +
+                          sin8(i * 7 - plasmaTime / 3) +
+                          sin8(panel * 50 + plasmaTime / 4);
+
+            uint8_t brightness = sin8(i * 10 + plasmaTime / 5) / 2 + 127;
+
+            leds[i] = CHSV(hue + gHue, 255, brightness);
+        }
+    }
+}
+
+void firePattern() {
+    // Fire simulation effect
+    static uint8_t heat[3][NUM_LEDS_PER_PANEL];
+
+    for (int panel = 0; panel < 3; panel++) {
+        CRGB* leds = getLEDArray(panel);
+
+        // Cool down every cell a little
+        for (int i = 0; i < NUM_LEDS_PER_PANEL; i++) {
+            heat[panel][i] = qsub8(heat[panel][i], random8(0, ((55 * 10) / NUM_LEDS_PER_PANEL) + 2));
+        }
+
+        // Heat from each cell drifts 'up' and diffuses a little
+        for (int k = NUM_LEDS_PER_PANEL - 1; k >= 2; k--) {
+            heat[panel][k] = (heat[panel][k - 1] + heat[panel][k - 2] + heat[panel][k - 2]) / 3;
+        }
+
+        // Randomly ignite new 'sparks' of heat near the bottom
+        if (random8() < 120) {
+            int y = random8(3);
+            heat[panel][y] = qadd8(heat[panel][y], random8(160, 255));
+        }
+
+        // Map from heat cells to LED colors
+        for (int j = 0; j < NUM_LEDS_PER_PANEL; j++) {
+            // Scale the heat value from 0-255 down to 0-240 for best color values
+            uint8_t colorindex = scale8(heat[panel][j], 240);
+            leds[j] = HeatColor(colorindex);
+        }
+    }
+}
+
+void twinklePattern() {
+    // Random twinkling stars effect
+    fadeToBlackBy(DJLEDs_Right, NUM_LEDS_PER_PANEL, 10);
+    fadeToBlackBy(DJLEDs_Middle, NUM_LEDS_PER_PANEL, 10);
+    fadeToBlackBy(DJLEDs_Left, NUM_LEDS_PER_PANEL, 10);
+
+    // Add random twinkles
+    for (int panel = 0; panel < 3; panel++) {
+        CRGB* leds = getLEDArray(panel);
+
+        if (random8() < 50) {
+            int pos = random8(NUM_LEDS_PER_PANEL);
+            // Random color with mostly white/blue tones
+            uint8_t hue = random8() < 128 ? random8(140, 180) : random8(); // 50% blue-ish
+            leds[pos] = CHSV(hue, random8(100, 255), 255);
+        }
+
+        // Occasionally add a bright white star
+        if (random8() < 20) {
+            int pos = random8(NUM_LEDS_PER_PANEL);
+            leds[pos] = CRGB::White;
         }
     }
 }

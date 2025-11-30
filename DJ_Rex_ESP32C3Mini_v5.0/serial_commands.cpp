@@ -79,7 +79,7 @@ bool checkSerialCommand() {
 void printHelp() {
     Serial.println(F("\n=== DJ Rex v5.0 - Command Reference ==="));
     Serial.println(F("Body Pattern Commands:"));
-    Serial.println(F("  S <0-16>           - Set pattern"));
+    Serial.println(F("  S <0-19>           - Set pattern"));
     Serial.println(F("  next/prev          - Navigate patterns"));
     Serial.println(F(""));
     Serial.println(F("Playlist Commands:"));
