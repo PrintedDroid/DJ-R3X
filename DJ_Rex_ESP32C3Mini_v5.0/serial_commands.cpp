@@ -1077,7 +1077,8 @@ void processSerialCommand() {
             
             // Clear all LEDs
             fill_solid(bodyLEDsChained, TOTAL_BODY_LEDS, CRGB::Black);
-            fill_solid(eyesMouthLEDs, NUM_EYES + NUM_MOUTH_LEDS, CRGB::Black);
+            fill_solid(DJLEDs_Eyes, NUM_EYES, CRGB::Black);
+            fill_solid(DJLEDs_Mouth, NUM_MOUTH_LEDS, CRGB::Black);
             FastLED.show();
             delay(500);
             
