@@ -49,22 +49,30 @@ void updateAutoGain() {
     // Track min/max levels
     if (audioLevel < audioMinLevel) audioMinLevel = audioLevel;
     if (audioLevel > audioMaxLevel) audioMaxLevel = audioLevel;
-    
+
     // Adjust threshold based on dynamic range
     static unsigned long lastGainUpdate = 0;
     if (millis() - lastGainUpdate > 1000) { // Update every second
         lastGainUpdate = millis();
-        
+
         int range = audioMaxLevel - audioMinLevel;
         if (range > 50) { // Minimum range to avoid noise
             audioThreshold = audioMinLevel + (range / 2);
-            
+
             // Slowly decay min/max for adaptation
             audioMinLevel += 10;
             audioMaxLevel -= 10;
-            
+
             // Constrain threshold
             audioThreshold = constrain(audioThreshold, 50, 500);
         }
+    }
+}
+
+// v5.0: Main audio update function for FreeRTOS task
+void updateAudio() {
+    // Process audio level if audio mode is enabled
+    if (audioMode != AUDIO_OFF) {
+        processAudioLevel();
     }
 }
