@@ -12,19 +12,8 @@ void mouthSmile();
 void mouthAudioReactive();
 void mouthRainbow();
 void mouthDebug();
-void mouthWave();
-void mouthPulse();
-void mouthSparkle();
-void mouthScanline();
-void mouthFirework();
-void mouthAudioVU();
-void mouthMatrix();
-void mouthHeartbeat();
-void mouthSpectrum();
 
-// Helper functions
+// Helper function for brightness compensation
 CRGB adjustMouthBrightness(CRGB color, int row, int ledInRow);
-bool isLeftSide(int row, int ledInRow);
-CRGB getMouthColor(int row, int ledInRow);
 
 #endif

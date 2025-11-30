@@ -4,33 +4,36 @@
 Preferences preferences;
 
 // Pattern parameters
-uint8_t currentPattern = 16;  // Default to Custom Block Sequence
+uint8_t currentPattern = 16;
 uint8_t ledBrightness = 90;
 uint8_t effectSpeed = 128;
 uint16_t sideMinTime = 500;
 uint16_t sideMaxTime = 2500;
 uint16_t blockMinTime = 200;
 uint16_t blockMaxTime = 1500;
+uint8_t beatsPerMinute = 62;
 uint8_t fadeSpeed = 8;
 uint8_t solidColorIndex = 0;
 uint8_t confettiColor1 = 0;
 uint8_t confettiColor2 = 3;
-uint8_t eyeColorIndex = 3;  // White
-uint8_t eyeColorIndex2 = 2; // Blue
-uint8_t eyeMode = EYE_MODE_SINGLE;
+uint8_t eyeColorIndex = 14;
 uint8_t solidMode = 0;
-
-// Eye flicker control
-bool eyeFlickerEnabled = true;
-uint16_t eyeFlickerMinTime = 200;
-uint16_t eyeFlickerMaxTime = 1600;
-uint8_t eyeStaticBrightness = 255;
 
 // Brightness controls
 uint8_t eyeBrightness = 125;
 uint8_t bodyBrightness = 100;
 uint8_t mouthOuterBoost = 100;
 uint8_t mouthInnerBoost = 150;
+
+// Eye control variables
+uint8_t eyeColorIndex2 = 12;
+uint8_t eyeMode = 0;
+
+// Eye flicker control variables
+bool eyeFlickerEnabled = false;
+uint16_t eyeFlickerMinTime = 200;
+uint16_t eyeFlickerMaxTime = 1600;
+uint8_t eyeStaticBrightness = 255;
 
 // Block colors
 uint8_t blockColors[9] = {0, 1, 2, 3, 4, 5, 6, 7, 8};
@@ -60,14 +63,14 @@ unsigned long matrixMillis = 0;
 unsigned long strobeMillis = 0;
 uint16_t knightInterval = 100;
 uint16_t strobeInterval = 100;
-uint8_t matrixDrops[3][SIDE_LEDS_COUNT];
-uint8_t matrixBright[3][SIDE_LEDS_COUNT];
+uint8_t matrixDrops[3][8];
+uint8_t matrixBright[3][8];
 
 // Mouth parameters
 uint8_t mouthPattern = 1;
-uint8_t mouthColorIndex = 2;
-uint8_t mouthColorIndex2 = 0;
-uint8_t mouthSplitMode = MOUTH_SPLIT_OFF;
+uint8_t mouthColorIndex = 0;
+uint8_t mouthColorIndex2 = 3;
+uint8_t mouthSplitMode = 0;
 uint8_t mouthBrightness = 90;
 bool mouthEnabled = true;
 uint8_t talkSpeed = 5;
@@ -92,34 +95,42 @@ uint8_t demoPatternIndex = 1;
 uint8_t demoColorIndex = 0;
 uint8_t demoStep = 0;
 
-// Startup sequence
-bool startupComplete = false;
-unsigned long startupBeginTime = 0;
-uint8_t startupPhase = 0;
-bool panelActive[3] = {false, false, false};
-unsigned long panelActivationTime[3] = {0, 0, 0};
-
 // Audio
+int audioLevel = 0;
 int audioThreshold = 100;
+unsigned long lastAudioRead = 0;
+int audioSamples[10] = {0};
+int averageAudio = 0;
+uint8_t audioSampleIdx = 0;
 uint8_t audioMode = AUDIO_ALL;
 uint8_t audioSensitivity = 5;
 bool audioAutoGain = true;
+int audioMinLevel = 4095;
+int audioMaxLevel = 0;
 
 // Timing arrays
 uint16_t IntervalTime[TOTAL_BODY_LEDS];
 unsigned long LEDMillis[TOTAL_BODY_LEDS];
 bool LEDOn[TOTAL_BODY_LEDS];
 
-// LED arrays for ESP32-C3 configuration
-// Body panels chained on IO3, Eyes on IO6, Mouth on IO7 (all separate)
-CRGB bodyLEDsChained[TOTAL_BODY_LEDS];   // Right->Middle->Left on IO3
-CRGB DJLEDs_Eyes[NUM_EYES];              // Eyes on IO6 (separate)
-CRGB DJLEDs_Mouth[NUM_MOUTH_LEDS];       // Mouth on IO7 (separate)
+// LED arrays
+CRGB DJLEDs_Right[NUM_LEDS_PER_PANEL];
+CRGB DJLEDs_Middle[NUM_LEDS_PER_PANEL];
+CRGB DJLEDs_Left[NUM_LEDS_PER_PANEL];
+CRGB DJLEDs_Eyes[NUM_EYES];
+CRGB DJLEDs_Mouth[NUM_MOUTH_LEDS];
 
-// Virtual LED array pointers for body panels (for code compatibility)
-CRGB* DJLEDs_Right = &bodyLEDsChained[0];                          // LEDs 0-19
-CRGB* DJLEDs_Middle = &bodyLEDsChained[NUM_LEDS_PER_PANEL];        // LEDs 20-39
-CRGB* DJLEDs_Left = &bodyLEDsChained[NUM_LEDS_PER_PANEL * 2];      // LEDs 40-59
+//Arrays for transition state
+CRGB old_DJLEDs_Right[NUM_LEDS_PER_PANEL];
+CRGB old_DJLEDs_Middle[NUM_LEDS_PER_PANEL];
+CRGB old_DJLEDs_Left[NUM_LEDS_PER_PANEL];
+CRGB old_DJLEDs_Eyes[NUM_EYES];
+CRGB old_DJLEDs_Mouth[NUM_MOUTH_LEDS];
+
+//Transition control variables
+bool transitionActive = false;
+unsigned long transitionStartTime = 0;
+int8_t requestedPattern = -1; // -1 means no request
 
 // Eyes variables
 uint16_t EyesIntervalTime[NUM_EYES];
@@ -136,39 +147,33 @@ unsigned long FadeMillis = 0;
 uint16_t DecayTime = DECAYTIME;
 uint16_t FadeInterval = 0;
 
-// Mouth layout (corrected for Mouth->Eyes chain)
+// Playlist-Definition und Initialisierung
+PlaylistEntry playlist[10] = {
+    {5, 15},  // Muster 5 (Rainbow) for 15s
+    {12, 20}, // Muster 12 (Breathing) for 20s
+    {7, 15},  // Muster 7 (Confetti) for 15s
+    {11, 20}  // Muster 11 (Knight Rider) for 20s
+};
+uint8_t playlistSize = 4; // Wir haben 4 Einträge in unserer Standard-Playlist
+bool playlistActive = false; // Playlist ist standardmäßig aus
+uint8_t playlistIndex = 0;
+unsigned long playlistPatternStartTime = 0;
+
+// Mouth layout
 const uint8_t mouthRowLeds[MOUTH_ROWS] = {8, 8, 8, 8, 8, 8, 8, 8, 6, 4, 4, 2};
 const uint8_t mouthRowStart[MOUTH_ROWS] = {0, 8, 16, 24, 32, 40, 48, 56, 64, 70, 74, 78};
 
 // Extended color palette
-const CRGB StandardColors[NUM_STANDARD_COLORS] = { 
-    CRGB::Red,              // 0: Red
-    CRGB::Green,            // 1: Green
-    CRGB::Blue,             // 2: Blue
-    CRGB(255, 253, 240),    // 3: Warm White
-    CRGB::Yellow,           // 4: Yellow
-    CRGB::Cyan,             // 5: Cyan
-    CRGB::Magenta,          // 6: Magenta
-    CRGB::Orange,           // 7: Orange
-    CRGB::Purple,           // 8: Purple
-    CRGB::Pink,             // 9: Pink
-    CRGB::Black,            // 10: Black/Random
-    CRGB(60, 255, 60),      // 11: Matrix Green
-    CRGB(170, 220, 255),    // 12: Ice Blue
-    CRGB(140, 0, 255),      // 13: UV Purple
-    CRGB(255, 191, 0),      // 14: Amber
-    CRGB(255, 255, 255),    // 15: Cool White
-    CRGB(180, 255, 0),      // 16: Lime Green
-    CRGB(0, 128, 128),      // 17: Teal
-    CRGB(180, 180, 180),    // 18: Pure White
-    CRGB(200, 220, 255)     // 19: Blue White
+const CRGB StandardColors[NUM_STANDARD_COLORS] = {
+    CRGB::Red, CRGB::Green, CRGB::Blue, CRGB(255, 230, 240), CRGB(255, 180, 0), CRGB::Cyan, CRGB::Magenta,
+    CRGB(255, 140, 0), CRGB::Purple, CRGB(255, 20, 147), CRGB::Black, CRGB(0, 200, 100), CRGB(100, 150, 255),
+    CRGB(140, 0, 255), CRGB(255, 120, 0), CRGB(255, 255, 255), CRGB(120, 255, 0), CRGB(0, 128, 128),
+    CRGB(255, 255, 255), CRGB(180, 200, 255)
 };
 
 const char* ColorNames[NUM_STANDARD_COLORS] = {
-    "Red", "Green", "Blue", "Warm White", "Yellow",
-    "Cyan", "Magenta", "Orange", "Purple", "Pink",
-    "Random", "Matrix Green", "Ice Blue", "UV Purple", "Amber",
-    "Cool White", "Lime Green", "Teal", "Pure White", "Blue White"
+    "Red", "Green", "Blue", "Warm White", "Yellow", "Cyan", "Magenta", "Orange", "Purple", "Pink", "Black",
+    "Matrix Green", "Ice Blue", "UV Purple", "Amber", "Cool White", "Lime Green", "Teal", "Pure White", "Blue White"
 };
 
 const char* SideColorModeNames[5] = {
@@ -176,157 +181,24 @@ const char* SideColorModeNames[5] = {
 };
 
 const char* MouthPatternNames[NUM_MOUTH_PATTERNS] = {
-    "Off", "Talk", "Smile", "Audio Reactive", "Rainbow",
-    "Debug", "Wave", "Pulse", "Sparkle", "Scanline",
-    "Firework", "Audio VU", "Matrix", "Heartbeat", "Spectrum"
+    "Off", "Talk", "Smile", "Audio Reactive", "Rainbow", "Debug",
+    "Wave", "Pulse", "VU Meter Horiz", "VU Meter Vert", "Frown", "Sparkle"
 };
 
-const char* MouthSplitModeNames[5] = {
-    "Single Color", "Left/Right", "Alternating Rows", "Center Gradient", "Top/Bottom"
+const char* EyeModeNames[3] = {
+    "Single Color", "Dual Color", "Alternating"
 };
 
-const char* AudioModeNames[6] = {
-    "Off", "Mouth Only", "Body Sides Only", "Body All", "Everything", "Frequency Bands"
+const char* MouthSplitNames[5] = {
+    "Off", "Vertical", "Horizontal", "Inner/Outer", "Random"
 };
 
-const char* EyeModeNames[5] = {
-    "Single Color", "Dual Colors", "Alternating", "Rainbow", "Audio Reactive"
+const char* AudioModeNames[5] = {
+    "Off", "Mouth Only", "Body Sides Only", "Body All", "Everything"
 };
 
 const char* patternNames[NUM_PATTERNS] = {
-    "LEDs Off",              // 0
-    "Random Blocks",         // 1
-    "Solid Color",           // 2
-    "Short Circuit",         // 3
-    "Confetti Red/White",    // 4
-    "Rainbow",               // 5
-    "Rainbow with Glitter",  // 6
-    "Confetti",              // 7
-    "Juggle",                // 8
-    "Audio Sync",            // 9
-    "Solid Flash",           // 10
-    "Knight Rider",          // 11
-    "Breathing",             // 12
-    "Matrix Rain",           // 13
-    "Strobe",                // 14
-    "Audio VU Meter",        // 15
-    "Custom Block Sequence", // 16
-    "Plasma",                // 17
-    "Fire",                  // 18
-    "Twinkle"                // 19
+    "LEDs Off", "Random Blocks", "Solid Color", "Short Circuit", "Confetti Red/White", "Rainbow", "Rainbow with Glitter",
+    "Confetti", "Juggle", "Audio Sync", "Solid Flash", "Knight Rider", "Breathing", "Matrix Rain", "Strobe",
+    "Audio VU Meter", "Custom Block Sequence"
 };
-
-// Pattern properties for demo mode
-const PatternProperties patternProps[NUM_PATTERNS] = {
-    {false, nullptr, nullptr},                    // 0: LEDs Off
-    {false, nullptr, nullptr},                    // 1: Random Blocks
-    {true, &solidColorIndex, "Solid Color"},      // 2: Solid Color
-    {true, &shortColorIndex, "Short Circuit"},    // 3: Short Circuit
-    {true, &confettiColor1, "Confetti"},          // 4: Confetti
-    {false, nullptr, nullptr},                    // 5: Rainbow
-    {false, nullptr, nullptr},                    // 6: Rainbow with Glitter
-    {false, nullptr, nullptr},                    // 7: Confetti
-    {false, nullptr, nullptr},                    // 8: Juggle
-    {false, nullptr, nullptr},                    // 9: Audio Sync
-    {true, &flashColorIndex, "Solid Flash"},      // 10: Solid Flash
-    {true, &knightColorIndex, "Knight Rider"},    // 11: Knight Rider
-    {true, &breathingColorIndex, "Breathing"},    // 12: Breathing
-    {true, &matrixColorIndex, "Matrix Rain"},     // 13: Matrix Rain
-    {true, &strobeColorIndex, "Strobe"},          // 14: Strobe
-    {false, nullptr, nullptr},                    // 15: Audio VU Meter
-    {false, nullptr, nullptr},                    // 16: Custom Block Sequence
-    {false, nullptr, nullptr},                    // 17: Plasma
-    {false, nullptr, nullptr},                    // 18: Fire
-    {false, nullptr, nullptr}                     // 19: Twinkle
-};
-
-// Thread synchronization
-SemaphoreHandle_t ledMutex = nullptr;
-volatile bool patternUpdating = false;
-
-// Demo mode state preservation
-uint8_t savedPattern = 16;
-bool savedDemoState = false;
-
-// Smooth transitions
-uint8_t colorFadeSteps = 8;
-bool enableSmoothTransitions = true;
-
-// System state
-bool systemReady = false;
-unsigned long bootTime = 0;
-
-// Serial command globals
-String inputString = "";
-boolean stringComplete = false;
-
-uint32_t failedCommands = 0;
-
-// Hardware validation function
-void validateHardwareConfiguration() {
-    Serial.println(F("=== Hardware Configuration Validation ==="));
-
-    // Validate LED array pointers
-    Serial.print(F("Body LEDs total: "));
-    Serial.println(TOTAL_BODY_LEDS);
-
-    Serial.print(F("Right panel pointer: "));
-    Serial.print((uintptr_t)DJLEDs_Right, HEX);
-    Serial.print(F(" (offset: "));
-    Serial.print(DJLEDs_Right - bodyLEDsChained);
-    Serial.println(F(")"));
-
-    Serial.print(F("Middle panel pointer: "));
-    Serial.print((uintptr_t)DJLEDs_Middle, HEX);
-    Serial.print(F(" (offset: "));
-    Serial.print(DJLEDs_Middle - bodyLEDsChained);
-    Serial.println(F(")"));
-
-    Serial.print(F("Left panel pointer: "));
-    Serial.print((uintptr_t)DJLEDs_Left, HEX);
-    Serial.print(F(" (offset: "));
-    Serial.print(DJLEDs_Left - bodyLEDsChained);
-    Serial.println(F(")"));
-
-    Serial.print(F("Mouth array: "));
-    Serial.print((uintptr_t)DJLEDs_Mouth, HEX);
-    Serial.print(F(" ("));
-    Serial.print(NUM_MOUTH_LEDS);
-    Serial.println(F(" LEDs on IO7)"));
-
-    Serial.print(F("Eyes array: "));
-    Serial.print((uintptr_t)DJLEDs_Eyes, HEX);
-    Serial.print(F(" ("));
-    Serial.print(NUM_EYES);
-    Serial.println(F(" LEDs on IO6)"));
-
-    // Validate array bounds
-    bool validConfig = true;
-
-    if (DJLEDs_Right != &bodyLEDsChained[0]) {
-        Serial.println(F("ERROR: Right panel pointer incorrect"));
-        validConfig = false;
-    }
-
-    if (DJLEDs_Middle != &bodyLEDsChained[NUM_LEDS_PER_PANEL]) {
-        Serial.println(F("ERROR: Middle panel pointer incorrect"));
-        validConfig = false;
-    }
-
-    if (DJLEDs_Left != &bodyLEDsChained[NUM_LEDS_PER_PANEL * 2]) {
-        Serial.println(F("ERROR: Left panel pointer incorrect"));
-        validConfig = false;
-    }
-
-    // Eyes and Mouth are now separate arrays, not pointers - always valid
-    Serial.println(F("Eyes and Mouth: Separate arrays (IO6, IO7)"));
-
-    Serial.print(F("Hardware configuration: "));
-    Serial.println(validConfig ? "VALID" : "INVALID");
-
-    if (!validConfig) {
-        Serial.println(F("CRITICAL: Hardware configuration errors detected!"));
-    }
-
-    Serial.println(F("========================================"));
-}

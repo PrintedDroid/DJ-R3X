@@ -1,182 +1,127 @@
 #include "serial_commands.h"
 #include "settings.h"
 #include "helpers.h"
-#include "pattern_manager.h"
-#include "preset_manager.h"
-#include "audio_processor.h"
-#include "event_logger.h"
-#include "eyes.h"  // NEW: For eye flicker settings
+#include "eyes.h"  // Added for printEyeFlickerSettings()
 
-// Serial input buffer management - THREAD SAFE
-static const unsigned long COMMAND_TIMEOUT_MS = 5000;
-static const uint8_t MAX_COMMAND_BUFFER_SIZE = 80; // Reduced for safety
-static unsigned long commandStartTime = 0;
-static bool commandInProgress = false;
-static uint32_t totalCommands = 0;
+// Serial input buffer
+String inputString = "";
+boolean stringComplete = false;
 
-// Command processing state
-static String lastCommand = "";
-static unsigned long lastCommandTime = 0;
-static uint8_t repeatCommandCount = 0;
+//Function to parse the playlist string
+void parsePlaylistCommand(String command) {
+    // Remove "playlist " part
+    String data = command.substring(9);
+    data.trim();
 
-// Buffer for safe string operations
-static char tempBuffer[MAX_COMMAND_BUFFER_SIZE];
+    // Clear current playlist
+    playlistSize = 0;
+    int entryIndex = 0;
 
-// Structured output helpers
-void printSeparator() {
-    Serial.println(F("========================================"));
-}
+    int currentPos = 0;
+    while (currentPos < data.length() && entryIndex < 10) {
+        int semicolonPos = data.indexOf(';', currentPos);
+        String entryString;
 
-void printSection(const char* title) {
-    Serial.println();
-    Serial.print(F(">>> "));
-    Serial.print(title);
-    Serial.println(F(" <<<"));
+        if (semicolonPos == -1) {
+            entryString = data.substring(currentPos);
+            currentPos = data.length();
+        } else {
+            entryString = data.substring(currentPos, semicolonPos);
+            currentPos = semicolonPos + 1;
+        }
+
+        int commaPos = entryString.indexOf(',');
+        if (commaPos > 0) {
+            uint8_t pattern = entryString.substring(0, commaPos).toInt();
+            uint16_t duration = entryString.substring(commaPos + 1).toInt();
+
+            if (pattern < NUM_PATTERNS && duration > 0) {
+                playlist[entryIndex].pattern = pattern;
+                playlist[entryIndex].duration = duration;
+                entryIndex++;
+            }
+        }
+    }
+    playlistSize = entryIndex;
+    Serial.print(F("Playlist created with "));
+    Serial.print(playlistSize);
+    Serial.println(F(" entries."));
 }
 
 bool checkSerialCommand() {
-    // Prevent concurrent command processing
-    if (commandInProgress) {
-        return false;
-    }
-    
     while (Serial.available()) {
-        // Initialize command timing on first character
-        if (inputString.length() == 0 && commandStartTime == 0) {
-            commandStartTime = millis();
-            commandInProgress = true;
-        }
-        
-        // CRITICAL: Check buffer size BEFORE reading character
-        if (inputString.length() >= MAX_COMMAND_BUFFER_SIZE - 2) {
-            Serial.print(F("\n! Command buffer full ("));
-            Serial.print(inputString.length());
-            Serial.print(F("/"));
-            Serial.print(MAX_COMMAND_BUFFER_SIZE);
-            Serial.println(F(" chars)"));
-            
-            // Find end of command or force termination
-            bool foundEnd = false;
-            uint8_t extraChars = 0;
-            while (Serial.available() && extraChars < 50) { // Max 50 extra chars
-                char discardChar = Serial.read();
-                extraChars++;
-                if (discardChar == '\n' || discardChar == '\r') {
-                    foundEnd = true;
-                    break;
-                }
-            }
-            
-            if (foundEnd) {
-                Serial.println(F("! Command truncated but processing"));
-                stringComplete = true;
-                return true;
-            } else {
-                Serial.println(F("! Command too long - discarded"));
-                inputString = "";
-                stringComplete = false;
-                commandStartTime = 0;
-                commandInProgress = false;
-                failedCommands++;
-                return false;
-            }
-        }
-        
         char inChar = (char)Serial.read();
         
-        // Handle command termination
-        if (inChar == '\n') {
-            stringComplete = true;
-            commandInProgress = false;
-            return true;
-        } else if (inChar == '\r') {
-            continue; // Ignore carriage returns
+        // Handle newline characters
+        if (inChar == '\n' || inChar == '\r') {
+            if (inputString.length() > 0) {  // Only process if we have content
+                stringComplete = true;
+                return true;
+            }
+        } else if (inChar >= 32 && inChar <= 126) {  // Only printable ASCII characters
+            inputString += inChar;
         }
         
-        // Filter out control characters except printable ASCII
-        if (inChar < 32 || inChar > 126) {
-            Serial.print(F("! Filtered invalid char: "));
-            Serial.println((int)inChar);
-            continue;
-        }
-        
-        // Safe to add character - we checked buffer size above
-        inputString += inChar;
-    }
-    
-    // Timeout handling
-    if (commandStartTime > 0 && millis() - commandStartTime > COMMAND_TIMEOUT_MS) {
-        Serial.println(F("\n! Command timeout - processing partial input"));
-        if (inputString.length() > 0) {
-            stringComplete = true;
-            commandInProgress = false;
-            return true;
-        } else {
-            Serial.println(F("! Empty command after timeout"));
-            commandStartTime = 0;
-            commandInProgress = false;
-            failedCommands++;
-            return false;
+        // Prevent buffer overflow
+        if (inputString.length() > 100) {
+            inputString = "";
+            Serial.println(F("Command too long - cleared"));
         }
     }
-    
     return false;
 }
 
 void printHelp() {
-    printSeparator();
-    Serial.println(F("DJ Rex v4.2.0 - Complete Command Reference"));
-    printSeparator();
-    
-    printSection("Body Pattern Commands");
-    Serial.println(F("  s <0-19>           - Set pattern"));
+    Serial.println(F("\n=== DJ Rex v3.1 - Command Reference ==="));
+    Serial.println(F("Body Pattern Commands:"));
+    Serial.println(F("  S <0-16>           - Set pattern"));
     Serial.println(F("  next/prev          - Navigate patterns"));
-    
-    printSection("Eye Commands");
-    Serial.println(F("  eyecolor <0-19>    - Set primary eye color"));
+    Serial.println(F(""));
+    Serial.println(F("Playlist Commands:"));
+    Serial.println(F("  playlist on/off    - Enable/disable playlist mode"));
+    Serial.println(F("  playlist show      - Show current playlist"));
+    Serial.println(F("  playlist <p,d;p,d> - Set playlist (e.g., playlist 5,10;12,20)"));
+    Serial.println(F(""));
+    Serial.println(F("Eye Commands:"));
+    Serial.println(F("  eyecolor <0-19>    - Set eye color"));
     Serial.println(F("  eyecolor2 <0-19>   - Set secondary eye color"));
-    Serial.println(F("  eyemode <0-4>      - Set eye mode"));
-    Serial.println(F("    0=Single, 1=Dual, 2=Alternating, 3=Rainbow, 4=Audio"));
-    Serial.println(F("  eyebrightness <50-200> - Eye brightness %"));
-    
-    // NEW: Eye flicker commands
+    Serial.println(F("  eyemode <0-2>      - Set eye mode (0=Single, 1=Dual, 2=Alternating)"));
+    Serial.println(F("  eyebrightness <50-200> - Set eye brightness %"));
     Serial.println(F("  eyeflicker on/off  - Enable/disable eye flicker"));
+    Serial.println(F("  eyeflicker settings - Show eye flicker configuration"));
     Serial.println(F("  eyeflickertime <min> <max> - Set flicker timing (ms)"));
     Serial.println(F("  eyestaticbright <0-255> - Set brightness when flicker off"));
-    Serial.println(F("  eyeflicker settings - Show eye flicker configuration"));
-    
-    printSection("Mouth Commands");
-    Serial.println(F("  mouth <0-14>       - Set mouth pattern"));
-    Serial.println(F("  mouthcolor <0-19>  - Set primary mouth color"));
+    Serial.println(F(""));
+    Serial.println(F("Mouth Commands:"));
+    Serial.println(F("  mouth <0-11>        - Set mouth pattern"));
+    Serial.println(F("  mouthcolor <0-19>  - Set mouth color"));
     Serial.println(F("  mouthcolor2 <0-19> - Set secondary mouth color"));
     Serial.println(F("  mouthsplit <0-4>   - Set mouth split mode"));
+    Serial.println(F("  wavespeed <1-10>   - Set wave animation speed"));
+    Serial.println(F("  pulsespeed <1-10>  - Set pulse animation speed"));
     Serial.println(F("  mouthbrightness <1-255> - Set mouth brightness"));
     Serial.println(F("  mouthenable on/off - Enable/disable mouth"));
     Serial.println(F("  talkspeed <1-10>   - Set talk animation speed"));
     Serial.println(F("  smilewidth <2-10>  - Set smile width"));
-    Serial.println(F("  wavespeed <1-10>   - Set wave animation speed"));
-    Serial.println(F("  pulsespeed <1-10>  - Set pulse animation speed"));
-    
-    printSection("Audio Commands");
-    Serial.println(F("  audiomode <0-5>    - Set audio routing mode"));
-    Serial.println(F("    0=Off, 1=Mouth Only, 2=Body Sides, 3=Body All"));
-    Serial.println(F("    4=Everything, 5=Frequency Bands"));
+    Serial.println(F(""));
+    Serial.println(F("Audio Commands:"));
+    Serial.println(F("  audiomode <0-4>    - Set audio routing mode"));
+    Serial.println(F("    0=Off, 1=Mouth Only, 2=Body Sides, 3=Body All, 4=Everything"));
     Serial.println(F("  audiosens <1-10>   - Set audio sensitivity"));
     Serial.println(F("  audiothreshold <50-500> - Set threshold manually"));
     Serial.println(F("  autogain on/off    - Enable/disable auto gain"));
-    Serial.println(F("  resetpeak          - Reset audio peak level"));
-    
-    printSection("Random Blocks Configuration");
+    Serial.println(F(""));
+    Serial.println(F("Random Blocks Configuration:"));
     Serial.println(F("  blockcolor <0-8> <0-19> - Set block color"));
     Serial.println(F("  blockrate <1-255>  - Set block blink speed"));
     Serial.println(F("  sidecolors <0-19> <0-19> <0-19> - Set side colors"));
     Serial.println(F("  sidemode <0-4>     - Set side color mode"));
     Serial.println(F("  siderate <1-255>   - Set side blink speed"));
     Serial.println(F("  showblocks         - Show block assignments"));
-    
-    printSection("Pattern Color Commands");
+    Serial.println(F(""));
+    Serial.println(F("Pattern Color Commands:"));
     Serial.println(F("  color <0-19>       - Solid color"));
-    Serial.println(F("  solidmode <0-1>    - Solid mode (0=Static, 1=Blink)"));
+    Serial.println(F("  solidmode <0-1>    - Solid mode"));
     Serial.println(F("  flashcolor <0-19>  - Flash color"));
     Serial.println(F("  flashspeed <1-10>  - Flash speed"));
     Serial.println(F("  shortcolor <0-19>  - Short circuit color"));
@@ -185,12 +130,12 @@ void printHelp() {
     Serial.println(F("  matrixcolor <0-19> - Matrix rain color"));
     Serial.println(F("  strobecolor <0-19> - Strobe color"));
     Serial.println(F("  confetti <0-19> <0-19> - Confetti colors"));
-    
-    printSection("Demo Mode");
+    Serial.println(F(""));
+    Serial.println(F("Demo Mode:"));
     Serial.println(F("  demo on/off        - Demo mode"));
-    Serial.println(F("  demotime <5-300>   - Demo interval (seconds)"));
-    
-    printSection("Settings");
+    Serial.println(F("  demotime <5-300>   - Demo interval"));
+    Serial.println(F(""));
+    Serial.println(F("Settings:"));
     Serial.println(F("  brightness <1-255> - Global brightness"));
     Serial.println(F("  bodybrightness <50-200> - Body brightness %"));
     Serial.println(F("  mouthouter <50-200> - Mouth outer LED boost %"));
@@ -199,135 +144,110 @@ void printHelp() {
     Serial.println(F("  fade <1-50>        - Fade speed"));
     Serial.println(F("  sidetime <min> <max> - Side LED timing"));
     Serial.println(F("  blocktime <min> <max> - Block timing"));
-    
-    printSection("System");
+    Serial.println(F(""));
+    Serial.println(F("System:"));
     Serial.println(F("  save               - Save to flash"));
     Serial.println(F("  load               - Load from flash"));
     Serial.println(F("  reset              - Factory reset"));
     Serial.println(F("  status             - Show settings"));
-    Serial.println(F("  sysinfo            - System information"));
-    Serial.println(F("  debug              - Debug information"));
-    Serial.println(F("  validate           - Validate system state"));
-    Serial.println(F("  reboot             - Restart device"));
     Serial.println(F("  help               - This help"));
-    
-    printSection("User Presets");
-    Serial.println(F("  saveuser <1-10> [name] - Save current as preset"));
-    Serial.println(F("  loaduser <1-10>    - Load user preset"));
-    Serial.println(F("  deleteuser <1-10>  - Delete user preset"));
+    Serial.println(F(""));
+    Serial.println(F("User Presets:"));
+    Serial.println(F("  saveuser <1-3>     - Save current setup as user preset"));
+    Serial.println(F("  loaduser <1-3>     - Load user preset"));
+    Serial.println(F("  deleteuser <1-3>   - Delete user preset"));
     Serial.println(F("  listpresets        - Show saved presets"));
-    Serial.println(F("  presetinfo <1-10>  - Show preset details"));
-    Serial.println(F("  validatepresets    - Check all presets"));
-       
-    printSection("Available Patterns");
+    Serial.println(F(""));
+    Serial.println(F("Patterns:"));
     for (int i = 0; i < NUM_PATTERNS; i++) {
         Serial.print(F("  "));
-        if (i < 10) Serial.print(F(" "));
         Serial.print(i);
         Serial.print(F(": "));
         Serial.println(patternNames[i]);
     }
-    
-    printSection("Available Colors");
-    for (int i = 0; i < NUM_STANDARD_COLORS; i++) {
-        if (i % 4 == 0) Serial.print(F("  "));
+    Serial.println(F(""));
+    Serial.println(F("Mouth Patterns:"));
+    for (int i = 0; i < NUM_MOUTH_PATTERNS; i++) {
+        Serial.print(F("  "));
         Serial.print(i);
-        if (i < 10) Serial.print(F(" "));
-        Serial.print(F(":"));
-        Serial.print(ColorNames[i]);
-        if (i < NUM_STANDARD_COLORS - 1) {
-            Serial.print(F(", "));
-            if ((i + 1) % 4 == 0) Serial.println();
-        }
+        Serial.print(F(": "));
+        Serial.println(MouthPatternNames[i]);
     }
-    Serial.println();
-    
-    // Command statistics
-    printSection("Command Statistics");
-    Serial.print(F("  Total Commands: "));
-    Serial.println(totalCommands);
-    Serial.print(F("  Failed Commands: "));
-    Serial.println(failedCommands);
-    Serial.print(F("  Success Rate: "));
-    if (totalCommands > 0) {
-        Serial.print(((totalCommands - failedCommands) * 100) / totalCommands);
-        Serial.println(F("%"));
-    } else {
-        Serial.println(F("N/A"));
+    Serial.println(F(""));
+    Serial.println(F("Audio Modes:"));
+    for (int i = 0; i < 5; i++) {
+        Serial.print(F("  "));
+        Serial.print(i);
+        Serial.print(F(": "));
+        Serial.println(AudioModeNames[i]);
     }
-    
-    printSeparator();
+    Serial.println(F(""));
+    Serial.println(F("Colors (Extended Palette):"));
+    for (int i = 0; i < NUM_STANDARD_COLORS; i++) {
+        Serial.print(F("  "));
+        if (i < 10) Serial.print(F(" "));  // Alignment for single digits
+        Serial.print(i);
+        Serial.print(F(": "));
+        Serial.println(ColorNames[i]);
+    }
+    Serial.println(F(""));
+    Serial.println(F("Block Layout:"));
+    Serial.println(F("  Left:   0=B1, 1=B2, 2=B3"));
+    Serial.println(F("  Middle: 3=B1, 4=B2, 5=B3"));
+    Serial.println(F("  Right:  6=B1, 7=B2, 8=B3"));
+    Serial.println(F("=====================================\n"));
 }
 
 void printCurrentSettings() {
-    printSeparator();
-    Serial.println(F("Current Settings"));
-    printSeparator();
-    
-    // Pattern info
+    Serial.println(F("\n=== Current Settings ==="));
     Serial.print(F("Pattern: "));
     Serial.print(currentPattern);
-    Serial.print(F(" - "));
-    Serial.println(patternNames[currentPattern]);
+    Serial.print(F(" ("));
+    Serial.print(patternNames[currentPattern]);
+    Serial.println(F(")"));
     
-    // Pattern manager status
-    if (patternManager.isTransitioning()) {
-        Serial.print(F("  Transition Progress: "));
-        Serial.print(patternManager.getTransitionProgress());
-        Serial.println(F("/255"));
-    }
-    
-    // Demo mode
     Serial.print(F("Demo Mode: "));
     if (demoMode) {
         Serial.print(F("ON ("));
         Serial.print(demoTime);
-        Serial.println(F("s interval)"));
+        Serial.println(F("s)"));
     } else {
         Serial.println(F("OFF"));
     }
     
-    // Audio
-    printSection("Audio");
-    Serial.print(F("  Mode: "));
+    Serial.println(F("\n--- Audio Settings ---"));
+    Serial.print(F("Mode: "));
     Serial.print(audioMode);
-    Serial.print(F(" - "));
-    Serial.println(AudioModeNames[audioMode]);
-    Serial.print(F("  Sensitivity: "));
-    Serial.print(audioSensitivity);
-    Serial.print(F("/10, Threshold: "));
-    Serial.print(audioThreshold);
-    Serial.print(F(", Auto Gain: "));
+    Serial.print(F(" ("));
+    Serial.print(AudioModeNames[audioMode]);
+    Serial.println(F(")"));
+    Serial.print(F("Sensitivity: "));
+    Serial.println(audioSensitivity);
+    Serial.print(F("Threshold: "));
+    Serial.println(audioThreshold);
+    Serial.print(F("Auto Gain: "));
     Serial.println(audioAutoGain ? "ON" : "OFF");
-    Serial.print(F("  Current Level: "));
-    Serial.print(audioProcessor.getLevel());
-    Serial.print(F(", Peak: "));
-    Serial.print(audioProcessor.getPeakLevel());
-    Serial.print(F(", Average: "));
-    Serial.print((int)audioProcessor.getAverageLevel());
-    Serial.print(F(", BPM: "));
-    Serial.println(audioProcessor.getBPM());
-    Serial.print(F("  Gain Multiplier: "));
-    Serial.print(audioProcessor.getGainMultiplier(), 2);
-    Serial.print(F(", Beat Detected: "));
-    Serial.println(audioProcessor.isBeatDetected() ? "YES" : "NO");
     
-    // Eyes - ENHANCED with flicker info
-    printSection("Eyes");
-    Serial.print(F("  Mode: "));
+    Serial.println(F("\n--- Eye Settings ---"));
+    Serial.print(F("Mode: "));
+    Serial.print(eyeMode);
+    Serial.print(F(" ("));
     Serial.print(EyeModeNames[eyeMode]);
-    Serial.print(F(", Colors: "));
+    Serial.println(F(")"));
+    Serial.print(F("Color 1: "));
+    Serial.print(eyeColorIndex);
+    Serial.print(F(" ("));
     Serial.print(ColorNames[eyeColorIndex]);
-    if (eyeMode != EYE_MODE_SINGLE) {
-        Serial.print(F(" / "));
-        Serial.print(ColorNames[eyeColorIndex2]);
-    }
-    Serial.println();
-    Serial.print(F("  Brightness: "));
+    Serial.println(F(")"));
+    Serial.print(F("Color 2: "));
+    Serial.print(eyeColorIndex2);
+    Serial.print(F(" ("));
+    Serial.print(ColorNames[eyeColorIndex2]);
+    Serial.println(F(")"));
+    Serial.print(F("Brightness: "));
     Serial.print(eyeBrightness);
     Serial.println(F("%"));
-
-    Serial.print(F("  Flicker: "));
+    Serial.print(F("Flicker: "));
     Serial.println(eyeFlickerEnabled ? "ON" : "OFF");
     if (eyeFlickerEnabled) {
         Serial.print(F("  Timing: "));
@@ -337,842 +257,813 @@ void printCurrentSettings() {
         Serial.println(F("ms"));
     } else {
         Serial.print(F("  Static Brightness: "));
-        Serial.println(eyeStaticBrightness);
+        Serial.print(eyeStaticBrightness);
+        Serial.println(F("/255"));
     }
     
-    // Mouth
-    printSection("Mouth");
-    Serial.print(F("  Pattern: "));
+    Serial.println(F("\n--- Mouth Settings ---"));
+    Serial.print(F("Enabled: "));
+    Serial.println(mouthEnabled ? "Yes" : "No");
+    Serial.print(F("Pattern: "));
     Serial.print(mouthPattern);
-    Serial.print(F(" - "));
-    Serial.println(MouthPatternNames[mouthPattern]);
-    Serial.print(F("  Color: "));
+    Serial.print(F(" ("));
+    Serial.print(MouthPatternNames[mouthPattern]);
+    Serial.println(F(")"));
+    Serial.print(F("Split Mode: "));
+    Serial.print(mouthSplitMode);
+    Serial.print(F(" ("));
+    Serial.print(MouthSplitNames[mouthSplitMode]);
+    Serial.println(F(")"));
+    Serial.print(F("Color 1: "));
+    Serial.print(mouthColorIndex);
+    Serial.print(F(" ("));
     Serial.print(ColorNames[mouthColorIndex]);
-    if (mouthSplitMode != MOUTH_SPLIT_OFF) {
-        Serial.print(F(" / "));
-        Serial.print(ColorNames[mouthColorIndex2]);
-        Serial.print(F(" ("));
-        Serial.print(MouthSplitModeNames[mouthSplitMode]);
-        Serial.print(F(")"));
-    }
-    Serial.println();
-    Serial.print(F("  Brightness: "));
-    Serial.print(mouthBrightness);
-    Serial.print(F(", Enabled: "));
-    Serial.print(mouthEnabled ? "YES" : "NO");
-    Serial.print(F(", Outer Boost: "));
-    Serial.print(mouthOuterBoost);
-    Serial.print(F("%, Inner Boost: "));
-    Serial.print(mouthInnerBoost);
-    Serial.println(F("%"));
+    Serial.println(F(")"));
+    Serial.print(F("Color 2: "));
+    Serial.print(mouthColorIndex2);
+    Serial.print(F(" ("));
+    Serial.print(ColorNames[mouthColorIndex2]);
+    Serial.println(F(")"));
+    Serial.print(F("Brightness: "));
+    Serial.println(mouthBrightness);
     
-    // Brightness
-    printSection("Brightness");
-    Serial.print(F("  Global: "));
-    Serial.print(ledBrightness);
-    Serial.print(F(", Eye: "));
-    Serial.print(eyeBrightness);
-    Serial.print(F("%, Body: "));
+    if (currentPattern == 1) {
+        Serial.println(F("\n--- Random Blocks Config ---"));
+        Serial.print(F("Side Colors: "));
+        Serial.print(ColorNames[sideColor1]);
+        Serial.print(F(", "));
+        Serial.print(ColorNames[sideColor2]);
+        Serial.print(F(", "));
+        Serial.println(ColorNames[sideColor3]);
+        Serial.print(F("Side Mode: "));
+        Serial.println(SideColorModeNames[sideColorMode]);
+        Serial.print(F("Side Rate: "));
+        Serial.println(sideBlinkRate);
+        Serial.print(F("Block Rate: "));
+        Serial.println(blockBlinkRate);
+        printBlockColors();
+    }
+    
+    Serial.println(F("\n--- General Settings ---"));
+    Serial.print(F("Global Brightness: "));
+    Serial.println(ledBrightness);
+    Serial.print(F("Body Brightness: "));
     Serial.print(bodyBrightness);
     Serial.println(F("%"));
-    
-    // Timing
-    printSection("Timing");
-    Serial.print(F("  Effect Speed: "));
-    Serial.print(effectSpeed);
-    Serial.print(F(", Fade: "));
+    Serial.print(F("Mouth Outer Boost: "));
+    Serial.print(mouthOuterBoost);
+    Serial.println(F("%"));
+    Serial.print(F("Mouth Inner Boost: "));
+    Serial.print(mouthInnerBoost);
+    Serial.println(F("%"));
+    Serial.print(F("Speed: "));
+    Serial.println(effectSpeed);
+    Serial.print(F("Fade: "));
     Serial.println(fadeSpeed);
-    Serial.print(F("  Side Time: "));
-    Serial.print(sideMinTime);
-    Serial.print(F("-"));
-    Serial.print(sideMaxTime);
-    Serial.print(F("ms, Block Time: "));
-    Serial.print(blockMinTime);
-    Serial.print(F("-"));
-    Serial.print(blockMaxTime);
-    Serial.println(F("ms"));
-    
-    // Side LED configuration
-    printSection("Side LEDs");
-    Serial.print(F("  Mode: "));
-    Serial.print(SideColorModeNames[sideColorMode]);
-    Serial.print(F(", Colors: "));
-    Serial.print(ColorNames[sideColor1]);
-    Serial.print(F(", "));
-    Serial.print(ColorNames[sideColor2]);
-    Serial.print(F(", "));
-    Serial.println(ColorNames[sideColor3]);
-    Serial.print(F("  Rates: Side="));
-    Serial.print(sideBlinkRate);
-    Serial.print(F(", Block="));
-    Serial.println(blockBlinkRate);
+    Serial.println(F("========================\n"));
 }
 
 void printBlockColors() {
-    printSection("Block Color Assignment");
-    const char* boardNames[3] = {"Left  ", "Middle", "Right "};
-    
-    // Visual representation
-    Serial.println(F("  [B1] [B2] [B3]   [B1] [B2] [B3]   [B1] [B2] [B3]"));
-    Serial.print(F("  "));
-    
-    // Print block colors with bounds checking
-    for (int board = 0; board < 3; board++) {
-        for (int block = 0; block < 3; block++) {
-            int blockIndex = (2 - board) * 3 + block;
-            if (blockIndex < 9) { // Safety check
-                Serial.print(F("["));
-                if (blockColors[blockIndex] < 10) Serial.print(F(" "));
-                Serial.print(blockColors[blockIndex]);
-                Serial.print(F("] "));
-            }
-        }
-        Serial.print(F("  "));
-    }
-    Serial.println();
-    Serial.println(F("  Left      Middle     Right"));
-    
-    // Detailed list with validation
-    Serial.println();
+    Serial.println(F("Block Colors:"));
+    const char* boardNames[3] = {"Left", "Middle", "Right"};
     for (int board = 0; board < 3; board++) {
         Serial.print(F("  "));
         Serial.print(boardNames[board]);
         Serial.print(F(": "));
         for (int block = 0; block < 3; block++) {
             int blockIndex = (2 - board) * 3 + block;
-            if (blockIndex < 9) {
-                Serial.print(F("B"));
-                Serial.print(block + 1);
-                Serial.print(F("="));
-                
-                uint8_t colorIdx = blockColors[blockIndex];
-                if (colorIdx < NUM_STANDARD_COLORS || colorIdx == 10) {
-                    Serial.print(ColorNames[colorIdx]);
-                } else {
-                    Serial.print(F("INVALID("));
-                    Serial.print(colorIdx);
-                    Serial.print(F(")"));
-                }
-                
-                if (block < 2) Serial.print(F(", "));
-            }
+            Serial.print(F("B"));
+            Serial.print(block + 1);
+            Serial.print(F("="));
+            Serial.print(ColorNames[blockColors[blockIndex]]);
+            if (block < 2) Serial.print(F(", "));
         }
         Serial.println();
     }
 }
 
-void printSystemInfo() {
-    printSection("System Information");
-    Serial.print(F("  Firmware: "));
-    Serial.print(FIRMWARE_VERSION);
-    Serial.print(F(" ("));
-    Serial.print(FIRMWARE_DATE);
-    Serial.println(F(")"));
-    
-    Serial.print(F("  Uptime: "));
-    unsigned long uptime = millis() / 1000;
-    Serial.print(uptime / 3600);
-    Serial.print(F("h "));
-    Serial.print((uptime % 3600) / 60);
-    Serial.print(F("m "));
-    Serial.print(uptime % 60);
-    Serial.println(F("s"));
-    
-    Serial.print(F("  Free Heap: "));
-    Serial.print(ESP.getFreeHeap());
-    Serial.print(F(" bytes (Min: "));
-    Serial.print(ESP.getMinFreeHeap());
-    Serial.print(F(", Largest Block: "));
-    Serial.print(ESP.getMaxAllocHeap());
-    Serial.println(F(")"));
-    
-    // Thread-safe LED FPS access
-    Serial.print(F("  LED FPS: "));
-    if (acquireLEDMutex(50, "printSystemInfo")) {
-        Serial.print(FastLED.getFPS());
-        releaseLEDMutex("printSystemInfo");
-    } else {
-        Serial.print(F("N/A"));
-    }
-    Serial.println();
-    
-    Serial.print(F("  CPU Frequency: "));
-    Serial.print(ESP.getCpuFreqMHz());
-    Serial.println(F(" MHz"));
-    
-    Serial.print(F("  Flash Size: "));
-    Serial.print(ESP.getFlashChipSize() / 1024 / 1024);
-    Serial.println(F(" MB"));
-    
-    Serial.print(F("  Chip Model: "));
-    Serial.println(ESP.getChipModel());
-    
-    Serial.print(F("  Chip Revision: "));
-    Serial.println(ESP.getChipRevision());
-    
-    Serial.print(F("  SDK Version: "));
-    Serial.println(ESP.getSdkVersion());
-    
-    // Task information
-    Serial.print(F("  FreeRTOS Tasks: "));
-    Serial.println(uxTaskGetNumberOfTasks());
-    
-    // System status
-    Serial.print(F("  System Ready: "));
-    Serial.println(systemReady ? "YES" : "NO");
-    
-    Serial.print(F("  Boot Time: "));
-    Serial.print(bootTime / 1000);
-    Serial.println(F("s"));
-}
-
-void printDebugInfo() {
-    printSection("Debug Information");
-    
-    // Pattern Manager Status
-    Serial.println(F("Pattern Manager:"));
-    patternManager.printStatus();
-    
-    // Preset Manager Statistics
-    Serial.println(F("Preset Manager:"));
-    presetManager.printStatistics();
-    
-    // LED Performance
-    printLEDPerformanceStats();
-    
-    // Audio Processor Status
-    Serial.println(F("Audio Processor:"));
-    Serial.print(F("  Current Level: "));
-    Serial.println(audioProcessor.getLevel());
-    Serial.print(F("  Peak Level: "));
-    Serial.println(audioProcessor.getPeakLevel());
-    Serial.print(F("  Average Level: "));
-    Serial.println(audioProcessor.getAverageLevel());
-    Serial.print(F("  Bass Level: "));
-    Serial.println(audioProcessor.getBassLevel());
-    Serial.print(F("  Mid Level: "));
-    Serial.println(audioProcessor.getMidLevel());
-    Serial.print(F("  Treble Level: "));
-    Serial.println(audioProcessor.getTrebleLevel());
-    Serial.print(F("  BPM: "));
-    Serial.println(audioProcessor.getBPM());
-    Serial.print(F("  Gain Multiplier: "));
-    Serial.println(audioProcessor.getGainMultiplier(), 3);
-    
-    // Memory analysis
-    Serial.println(F("Memory Analysis:"));
-    Serial.print(F("  Stack High Water Mark: "));
-    Serial.println(uxTaskGetStackHighWaterMark(NULL));
-    
-    // Event Logger
-    Serial.print(F("Event Logger Entries: "));
-    Serial.println(eventLogger.getCount());
-}
-
-// Safe integer parsing with comprehensive error handling
-int safeParseInt(const String& str, int defaultValue = -1, int minValue = INT_MIN, int maxValue = INT_MAX) {
-    // Input validation
-    if (str.length() == 0) {
-        return defaultValue;
-    }
-    
-    if (str.length() > 10) { // Reasonable limit for integer strings
-        Serial.print(F("! Number too long: "));
-        Serial.println(str);
-        return defaultValue;
-    }
-    
-    // Copy to buffer for safe processing
-    if (str.length() >= sizeof(tempBuffer)) {
-        return defaultValue;
-    }
-    
-    str.toCharArray(tempBuffer, sizeof(tempBuffer));
-    
-    // Check format: optional minus, then digits only
-    bool negative = false;
-    int startPos = 0;
-    
-    if (tempBuffer[0] == '-') {
-        negative = true;
-        startPos = 1;
-    } else if (tempBuffer[0] == '+') {
-        startPos = 1;
-    }
-    
-    // Must have at least one digit after sign
-    if (tempBuffer[startPos] == '\0') {
-        return defaultValue;
-    }
-    
-    // Validate all remaining characters are digits
-    for (int i = startPos; tempBuffer[i] != '\0'; i++) {
-        if (!isdigit(tempBuffer[i])) {
-            Serial.print(F("! Invalid character in number: '"));
-            Serial.print(tempBuffer[i]);
-            Serial.println(F("'"));
-            return defaultValue;
-        }
-    }
-    
-    // Parse with overflow detection
-    long longValue = str.toInt();
-    
-    // Check for overflow/underflow
-    if (longValue < (long)minValue || longValue > (long)maxValue) {
-        Serial.print(F("! Number out of range: "));
-        Serial.print(longValue);
-        Serial.print(F(" (allowed: "));
-        Serial.print(minValue);
-        Serial.print(F(" to "));
-        Serial.print(maxValue);
-        Serial.println(F(")"));
-        return defaultValue;
-    }
-    
-    return (int)longValue;
-}
-
-// Safe string parameter extraction
-bool extractStringParams(const String& input, String* params, int maxParams, int& paramCount) {
-    paramCount = 0;
-    if (maxParams <= 0) return false;
-    
-    int startPos = 0;
-    int spacePos = 0;
-    
-    while (paramCount < maxParams && startPos < (int)input.length()) {
-        spacePos = input.indexOf(' ', startPos);
-        
-        if (spacePos == -1) {
-            // Last parameter
-            params[paramCount] = input.substring(startPos);
-            params[paramCount].trim();
-            if (params[paramCount].length() > 0) {
-                paramCount++;
-            }
-            break;
-        } else {
-            // Extract parameter
-            params[paramCount] = input.substring(startPos, spacePos);
-            params[paramCount].trim();
-            if (params[paramCount].length() > 0) {
-                paramCount++;
-            }
-            startPos = spacePos + 1;
-        }
-    }
-    
-    return paramCount > 0;
-}
-
 void processSerialCommand() {
-    totalCommands++;
-    unsigned long commandProcessingStart = millis();
+    inputString.trim();
+    inputString.toLowerCase();
+
+    if (inputString.length() == 0) {
+        stringComplete = false;
+        return;
+    }
+
+    Serial.print(F("Processing command: '"));
+    Serial.print(inputString);
+    Serial.println(F("'"));
     
-    // NEU: Eine do-while(false)-Schleife umschließt die gesamte Logik.
-    // Dies ermöglicht es uns, mit 'break' sicher aus dem Block zu springen.
-    do {
-        // Input validation and sanitization
-        inputString.trim();
-        
-        if (inputString.length() == 0) {
-            Serial.println(F("! Empty command"));
-            failedCommands++;
-            break; // ERSETZT: goto cleanup;
+    if (inputString == "help" || inputString == "h") {
+        printHelp();
+    }
+    else if (inputString == "status") {
+        printCurrentSettings();
+    }
+    else if (inputString == "showblocks") {
+        printBlockColors();
+    }
+
+//Playlist command processing
+    else if (inputString == "playlist on") {
+        if (playlistSize > 0) {
+            playlistActive = true;
+            playlistIndex = 0;
+            currentPattern = playlist[playlistIndex].pattern;
+            playlistPatternStartTime = millis();
+            Serial.println(F("Playlist ON."));
+            Serial.print(F("Starting with pattern "));
+            Serial.println(currentPattern);
+        } else {
+            Serial.println(F("Playlist is empty. Cannot start."));
         }
-        
-        // Check for command repetition (potential spam/loop)
-        if (inputString == lastCommand && millis() - lastCommandTime < 1000) {
-            repeatCommandCount++;
-            if (repeatCommandCount > 5) {
-                Serial.println(F("! Command repeated too many times - ignoring"));
-                failedCommands++;
-                break; // ERSETZT: goto cleanup;
+    }
+    else if (inputString == "playlist off") {
+        playlistActive = false;
+        Serial.println(F("Playlist OFF."));
+    }
+    else if (inputString == "playlist show") {
+        Serial.println(F("--- Current Playlist ---"));
+        if (playlistSize == 0) {
+            Serial.println(F("[Empty]"));
+        } else {
+            for (int i = 0; i < playlistSize; i++) {
+                Serial.print(i + 1);
+                Serial.print(F(": Pattern "));
+                Serial.print(playlist[i].pattern);
+                Serial.print(F(" ("));
+                Serial.print(patternNames[playlist[i].pattern]);
+                Serial.print(F(") for "));
+                Serial.print(playlist[i].duration);
+                Serial.println(F("s"));
+            }
+        }
+        Serial.println(F("------------------------"));
+    }
+    else if (inputString.startsWith("playlist ")) {
+        playlistActive = false; // Stop playlist while redefining it
+        parsePlaylistCommand(inputString);
+    }
+
+    // Pattern commands
+    else if (inputString.startsWith("s ")) {
+        int pattern = inputString.substring(2).toInt();
+        if (pattern >= 0 && pattern < NUM_PATTERNS) {
+            requestedPattern = pattern; // Set request instead of changing directly
+            demoMode = false;
+            playlistActive = false;
+            Serial.print(F("Pattern change requested to: "));
+            Serial.println(patternNames[pattern]);
+        } else {
+            Serial.print(F("Invalid pattern! Use 0-"));
+            Serial.println(NUM_PATTERNS - 1);
+        }
+    }
+    else if (inputString == "next") {
+        uint8_t nextPat = (currentPattern + 1) % NUM_PATTERNS;
+        requestedPattern = nextPat; // Set request
+        demoMode = false;
+        playlistActive = false;
+        Serial.print(F("Pattern change requested to: "));
+        Serial.println(patternNames[nextPat]);
+    }
+    else if (inputString == "prev") {
+        uint8_t prevPat = (currentPattern == 0) ? NUM_PATTERNS - 1 : currentPattern - 1;
+        requestedPattern = prevPat; // Set request
+        demoMode = false;
+        playlistActive = false;
+        Serial.print(F("Pattern change requested to: "));
+        Serial.println(patternNames[prevPat]);
+    }
+    // Eye flicker commands
+    else if (inputString == "eyeflicker on") {
+        eyeFlickerEnabled = true;
+        Serial.println(F("Eye flicker enabled"));
+    }
+    else if (inputString == "eyeflicker off") {
+        eyeFlickerEnabled = false;
+        Serial.println(F("Eye flicker disabled - eyes now static"));
+    }
+    else if (inputString == "eyeflicker settings") {
+        printEyeFlickerSettings();
+    }
+    else if (inputString.startsWith("eyeflickertime ")) {
+        int spaceIndex = inputString.indexOf(' ', 15);
+        if (spaceIndex > 0) {
+            int minTime = inputString.substring(15, spaceIndex).toInt();
+            int maxTime = inputString.substring(spaceIndex + 1).toInt();
+            if (minTime >= 50 && maxTime > minTime && maxTime <= 5000) {
+                eyeFlickerMinTime = minTime;
+                eyeFlickerMaxTime = maxTime;
+                Serial.print(F("Eye flicker timing: "));
+                Serial.print(minTime);
+                Serial.print(F("-"));
+                Serial.print(maxTime);
+                Serial.println(F("ms"));
+                
+                for (int i = 0; i < NUM_EYES; i++) {
+                    EyesIntervalTime[i] = random(eyeFlickerMinTime, eyeFlickerMaxTime);
+                }
+            } else {
+                Serial.println(F("Invalid timing! Use: eyeflickertime <50-5000> <50-5000> (max > min)"));
             }
         } else {
-            lastCommand = inputString;
-            repeatCommandCount = 0;
+            Serial.println(F("Usage: eyeflickertime <min_ms> <max_ms>"));
         }
-        lastCommandTime = millis();
-        
-        // Store original for error reporting
-        String originalCommand = inputString;
-        inputString.toLowerCase();
-        
-        // Basic command processing with comprehensive error handling
-        bool commandFound = false;
-        
-        // Single-word commands
-        if (inputString == "help" || inputString == "h") {
-            printHelp();
-            commandFound = true;
+    }
+    else if (inputString.startsWith("eyestaticbright ")) {
+        int brightness = inputString.substring(16).toInt();
+        if (brightness >= 0 && brightness <= 255) {
+            eyeStaticBrightness = brightness;
+            Serial.print(F("Eye static brightness: "));
+            Serial.print(brightness);
+            Serial.println(F("/255"));
+        } else {
+            Serial.println(F("Invalid brightness! Use 0-255"));
         }
-        else if (inputString == "status") {
-            printCurrentSettings();
-            commandFound = true;
+    }
+    // --- NEW EYE COMMANDS ---
+    else if (inputString.startsWith("eyecolor2 ")) {
+        int color = inputString.substring(10).toInt();
+        if (color >= 0 && color < NUM_STANDARD_COLORS) {
+            eyeColorIndex2 = color;
+            Serial.print(F("Eye color 2 set to: "));
+            Serial.println(ColorNames[color]);
+        } else {
+            Serial.print(F("Invalid color! Use 0-"));
+            Serial.println(NUM_STANDARD_COLORS - 1);
         }
-        else if (inputString == "sysinfo") {
-            printSystemInfo();
-            commandFound = true;
+    }
+    else if (inputString.startsWith("eyemode ")) {
+        int mode = inputString.substring(8).toInt();
+        if (mode >= 0 && mode < 3) {
+            eyeMode = mode;
+            Serial.print(F("Eye mode set to: "));
+            Serial.print(mode);
+            Serial.print(F(" ("));
+            Serial.print(EyeModeNames[mode]);
+            Serial.println(F(")"));
+        } else {
+            Serial.println(F("Invalid eye mode! Use 0-2"));
         }
-        else if (inputString == "debug") {
-            printDebugInfo();
-            commandFound = true;
+    }
+    // Audio commands
+    else if (inputString.startsWith("audiomode ")) {
+        int mode = inputString.substring(10).toInt();
+        if (mode >= 0 && mode <= 4) {
+            audioMode = mode;
+            Serial.print(F("Audio mode: "));
+            Serial.println(AudioModeNames[mode]);
+        } else {
+            Serial.println(F("Invalid audio mode! Use 0-4"));
         }
-        else if (inputString == "showblocks") {
-            printBlockColors();
-            commandFound = true;
+    }
+    else if (inputString.startsWith("audiosens ")) {
+        int sens = inputString.substring(10).toInt();
+        if (sens >= 1 && sens <= 10) {
+            audioSensitivity = sens;
+            Serial.print(F("Audio sensitivity: "));
+            Serial.println(sens);
+        } else {
+            Serial.println(F("Invalid sensitivity! Use 1-10"));
         }
-        else if (inputString == "validate") {
-            Serial.println(F("> Running system validation..."));
-            validateHelperState();
-            uint8_t corruptedPresets = presetManager.validateAllPresets();
-            if (corruptedPresets > 0) {
-                Serial.print(F("> Found "));
-                Serial.print(corruptedPresets);
-                Serial.println(F(" corrupted presets"));
+    }
+    else if (inputString == "autogain on") {
+        audioAutoGain = true;
+        Serial.println(F("Auto gain enabled"));
+    }
+    else if (inputString == "autogain off") {
+        audioAutoGain = false;
+        Serial.println(F("Auto gain disabled"));
+    }
+    // Mouth commands
+    else if (inputString.startsWith("mouth ")) {
+        int pattern = inputString.substring(6).toInt();
+        if (pattern >= 0 && pattern < NUM_MOUTH_PATTERNS) {
+            mouthPattern = pattern;
+            Serial.print(F("Mouth pattern: "));
+            Serial.println(MouthPatternNames[pattern]);
+        } else {
+            Serial.print(F("Invalid mouth pattern! Use 0-"));
+            Serial.println(NUM_MOUTH_PATTERNS - 1);
+        }
+    }
+    else if (inputString.startsWith("mouthcolor ")) {
+        int color = inputString.substring(11).toInt();
+        if (color >= 0 && color < NUM_STANDARD_COLORS) {
+            mouthColorIndex = color;
+            Serial.print(F("Mouth color: "));
+            Serial.println(ColorNames[color]);
+        } else {
+            Serial.print(F("Invalid mouth color! Use 0-"));
+            Serial.println(NUM_STANDARD_COLORS - 1);
+        }
+    }
+    // --- NEW MOUTH COMMANDS ---
+    else if (inputString.startsWith("mouthcolor2 ")) {
+        int color = inputString.substring(12).toInt();
+        if (color >= 0 && color < NUM_STANDARD_COLORS) {
+            mouthColorIndex2 = color;
+            Serial.print(F("Mouth color 2: "));
+            Serial.println(ColorNames[color]);
+        } else {
+            Serial.print(F("Invalid mouth color! Use 0-"));
+            Serial.println(NUM_STANDARD_COLORS - 1);
+        }
+    }
+    else if (inputString.startsWith("mouthsplit ")) {
+        int mode = inputString.substring(11).toInt();
+        if (mode >= 0 && mode < 5) {
+            mouthSplitMode = mode;
+            Serial.print(F("Mouth split mode: "));
+            Serial.println(MouthSplitNames[mode]);
+        } else {
+            Serial.println(F("Invalid split mode! Use 0-4"));
+        }
+    }
+    else if (inputString.startsWith("wavespeed ")) {
+        int speed = inputString.substring(10).toInt();
+        if (speed >= 1 && speed <= 10) {
+            waveSpeed = speed;
+            Serial.print(F("Wave speed: "));
+            Serial.println(speed);
+        } else {
+            Serial.println(F("Invalid speed! Use 1-10"));
+        }
+    }
+    else if (inputString.startsWith("pulsespeed ")) {
+        int speed = inputString.substring(11).toInt();
+        if (speed >= 1 && speed <= 10) {
+            pulseSpeed = speed;
+            Serial.print(F("Pulse speed: "));
+            Serial.println(speed);
+        } else {
+            Serial.println(F("Invalid speed! Use 1-10"));
+        }
+    }
+    // --- END NEW MOUTH COMMANDS ---
+    else if (inputString.startsWith("mouthbrightness ")) {
+        int bright = inputString.substring(16).toInt();
+        if (bright >= 1 && bright <= 255) {
+            mouthBrightness = bright;
+            Serial.print(F("Mouth brightness: "));
+            Serial.println(bright);
+        } else {
+            Serial.println(F("Invalid brightness! Use 1-255"));
+        }
+    }
+    else if (inputString == "mouthenable on") {
+        mouthEnabled = true;
+        Serial.println(F("Mouth enabled"));
+    }
+    else if (inputString == "mouthenable off") {
+        mouthEnabled = false;
+        Serial.println(F("Mouth disabled"));
+    }
+    else if (inputString.startsWith("talkspeed ")) {
+        int speed = inputString.substring(10).toInt();
+        if (speed >= 1 && speed <= 10) {
+            talkSpeed = speed;
+            Serial.print(F("Talk speed: "));
+            Serial.println(speed);
+        } else {
+            Serial.println(F("Invalid talk speed! Use 1-10"));
+        }
+    }
+    else if (inputString.startsWith("smilewidth ")) {
+        int width = inputString.substring(11).toInt();
+        if (width >= 2 && width <= 10) {
+            smileWidth = width;
+            Serial.print(F("Smile width: "));
+            Serial.println(width);
+        } else {
+            Serial.println(F("Invalid smile width! Use 2-10"));
+        }
+    }
+    // Block commands
+    else if (inputString.startsWith("blockcolor ")) {
+        int spaceIndex = inputString.indexOf(' ', 11);
+        if (spaceIndex > 0) {
+            int blockIndex = inputString.substring(11, spaceIndex).toInt();
+            int colorIndex = inputString.substring(spaceIndex + 1).toInt();
+            if (blockIndex >= 0 && blockIndex <= 8 && colorIndex >= 0 && colorIndex < NUM_STANDARD_COLORS) {
+                blockColors[blockIndex] = colorIndex;
+                demoMode = false;
+                const char* boardNames[3] = {"Left", "Middle", "Right"};
+                int boardIdx = blockIndex / 3;
+                Serial.print(F("Block "));
+                Serial.print(blockIndex);
+                Serial.print(F(" ("));
+                Serial.print(boardNames[boardIdx]);
+                Serial.print(F(" B"));
+                Serial.print((blockIndex % 3) + 1);
+                Serial.print(F(") = "));
+                Serial.println(ColorNames[colorIndex]);
             } else {
-                Serial.println(F("> System validation complete - no issues found"));
+                Serial.print(F("Invalid! Use: blockcolor <0-8> <0-"));
+                Serial.print(NUM_STANDARD_COLORS - 1);
+                Serial.println(F(">"));
             }
-            commandFound = true;
         }
-        else if (inputString == "save") {
-            saveSettings();
-            Serial.println(F("> Settings saved to flash"));
-            commandFound = true;
+    }
+    else if (inputString.startsWith("blockrate ")) {
+        int rate = inputString.substring(10).toInt();
+        if (rate >= 1 && rate <= 255) {
+            blockBlinkRate = rate;
+            Serial.print(F("Block rate: "));
+            Serial.println(rate);
         }
-        else if (inputString == "load") {
-            loadSettings();
-            Serial.println(F("> Settings loaded from flash"));
-            commandFound = true;
-        }
-        else if (inputString == "reset") {
-            Serial.println(F("> Resetting to factory defaults..."));
-            resetToDefaults();
-            saveSettings();
-            Serial.println(F("> Factory reset complete"));
-            commandFound = true;
-        }
-        else if (inputString == "reboot") {
-            Serial.println(F("> Rebooting in 3 seconds..."));
-            // Save current state before reboot
-            saveSettings();
-            delay(3000);
-            ESP.restart();
-        }
-        
-        // Pattern commands
-        else if (inputString.startsWith("s ")) {
-            int pattern = safeParseInt(inputString.substring(2), -1, 0, NUM_PATTERNS - 1);
-            if (pattern >= 0) {
-                PatternChangeResult result = patternManager.changePattern(pattern);
-                if (result == PATTERN_CHANGE_SUCCESS) {
-                    Serial.print(F("> Pattern changed to: "));
-                    Serial.print(pattern);
-                    Serial.print(F(" - "));
-                    Serial.println(patternNames[pattern]);
-                } else {
-                    Serial.print(F("! Pattern change failed (error "));
-                    Serial.print((int)result);
-                    Serial.println(F(")"));
-                    failedCommands++;
-                }
+    }
+    else if (inputString.startsWith("sidecolors ")) {
+        int space1 = inputString.indexOf(' ', 11);
+        int space2 = inputString.indexOf(' ', space1 + 1);
+        if (space1 > 0 && space2 > 0) {
+            int c1 = inputString.substring(11, space1).toInt();
+            int c2 = inputString.substring(space1 + 1, space2).toInt();
+            int c3 = inputString.substring(space2 + 1).toInt();
+            if (c1 >= 0 && c1 < NUM_STANDARD_COLORS && 
+                c2 >= 0 && c2 < NUM_STANDARD_COLORS && 
+                c3 >= 0 && c3 < NUM_STANDARD_COLORS) {
+                sideColor1 = c1;
+                sideColor2 = c2;
+                sideColor3 = c3;
+                demoMode = false;
+                Serial.print(F("Side colors: "));
+                Serial.print(ColorNames[c1]);
+                Serial.print(F(", "));
+                Serial.print(ColorNames[c2]);
+                Serial.print(F(", "));
+                Serial.println(ColorNames[c3]);
             } else {
-                Serial.print(F("! Invalid pattern! Use 0-"));
-                Serial.println(NUM_PATTERNS - 1);
-                failedCommands++;
+                Serial.print(F("Invalid! Use: sidecolors <0-"));
+                Serial.print(NUM_STANDARD_COLORS - 1);
+                Serial.print(F("> <0-"));
+                Serial.print(NUM_STANDARD_COLORS - 1);
+                Serial.print(F("> <0-"));
+                Serial.print(NUM_STANDARD_COLORS - 1);
+                Serial.println(F(">"));
             }
-            commandFound = true;
         }
-        else if (inputString == "next") {
-            PatternChangeResult result = patternManager.nextPattern();
-            if (result == PATTERN_CHANGE_SUCCESS) {
-                Serial.print(F("> Next pattern: "));
-                Serial.print(currentPattern);
-                Serial.print(F(" - "));
-                Serial.println(patternNames[currentPattern]);
-            } else {
-                Serial.println(F("! Failed to change to next pattern"));
-                failedCommands++;
-            }
-            commandFound = true;
+    }
+    else if (inputString.startsWith("sidemode ")) {
+        int mode = inputString.substring(9).toInt();
+        if (mode >= 0 && mode <= 4) {
+            sideColorMode = mode;
+            sideColorCycleIndex = 0;
+            Serial.print(F("Side mode: "));
+            Serial.println(SideColorModeNames[mode]);
         }
-        else if (inputString == "prev") {
-            PatternChangeResult result = patternManager.previousPattern();
-            if (result == PATTERN_CHANGE_SUCCESS) {
-                Serial.print(F("> Previous pattern: "));
-                Serial.print(currentPattern);
-                Serial.print(F(" - "));
-                Serial.println(patternNames[currentPattern]);
-            } else {
-                Serial.println(F("! Failed to change to previous pattern"));
-                failedCommands++;
-            }
-            commandFound = true;
+    }
+    else if (inputString.startsWith("siderate ")) {
+        int rate = inputString.substring(9).toInt();
+        if (rate >= 1 && rate <= 255) {
+            sideBlinkRate = rate;
+            Serial.print(F("Side rate: "));
+            Serial.println(rate);
         }
-        
-        // Eye commands
-        else if (inputString.startsWith("eyecolor ")) {
-            int color = safeParseInt(inputString.substring(9), -1, 0, NUM_STANDARD_COLORS - 1);
-            if (color >= 0) {
-                eyeColorIndex = color;
-                Serial.print(F("> Eye color set to: "));
-                Serial.println(ColorNames[color]);
-            } else {
-                Serial.println(F("! Invalid color index"));
-                failedCommands++;
-            }
-            commandFound = true;
-        }
-        else if (inputString.startsWith("eyecolor2 ")) {
-            int color = safeParseInt(inputString.substring(10), -1, 0, NUM_STANDARD_COLORS - 1);
-            if (color >= 0) {
-                eyeColorIndex2 = color;
-                Serial.print(F("> Eye color 2 set to: "));
-                Serial.println(ColorNames[color]);
-            } else {
-                Serial.println(F("! Invalid color index"));
-                failedCommands++;
-            }
-            commandFound = true;
-        }
-        else if (inputString.startsWith("eyemode ")) {
-            int mode = safeParseInt(inputString.substring(8), -1, 0, 4);
-            if (mode >= 0) {
-                eyeMode = mode;
-                Serial.print(F("> Eye mode set to: "));
-                Serial.println(EyeModeNames[mode]);
-            } else {
-                Serial.println(F("! Invalid eye mode (0-4)"));
-                failedCommands++;
-            }
-            commandFound = true;
-        }
-        // NEW: Eye flicker commands
-        else if (inputString == "eyeflicker on") {
-            eyeFlickerEnabled = true;
-            Serial.println(F("> Eye flicker enabled"));
-            commandFound = true;
-        }
-        else if (inputString == "eyeflicker off") {
-            eyeFlickerEnabled = false;
-            Serial.println(F("> Eye flicker disabled - eyes now static"));
-            commandFound = true;
-        }
-        else if (inputString.startsWith("eyeflickertime ")) {
-            String params[2];
-            int paramCount;
-            
-            if (extractStringParams(inputString.substring(15), params, 2, paramCount) && paramCount == 2) {
-                int minTime = safeParseInt(params[0], -1, 50, 5000);
-                int maxTime = safeParseInt(params[1], -1, 50, 5000);
-                
-                if (minTime > 0 && maxTime > 0) {
-                    if (maxTime <= minTime) {
-                        Serial.println(F("! Max time must be greater than min time"));
-                        failedCommands++;
-                    } else {
-                        eyeFlickerMinTime = minTime;
-                        eyeFlickerMaxTime = maxTime;
-                        Serial.print(F("> Eye flicker timing set to "));
-                        Serial.print(minTime);
-                        Serial.print(F("-"));
-                        Serial.print(maxTime);
-                        Serial.println(F("ms"));
-                    }
-                } else {
-                    Serial.println(F("! Invalid timing values (50-5000ms)"));
-                    failedCommands++;
-                }
-            } else {
-                Serial.println(F("! Usage: eyeflickertime <min> <max>"));
-                failedCommands++;
-            }
-            commandFound = true;
-        }
-        else if (inputString.startsWith("eyestaticbright ")) {
-            int brightness = safeParseInt(inputString.substring(16), -1, 0, 255);
-            if (brightness >= 0) {
-                eyeStaticBrightness = brightness;
-                Serial.print(F("> Eye static brightness set to: "));
-                Serial.println(brightness);
-            } else {
-                Serial.println(F("! Invalid brightness (0-255)"));
-                failedCommands++;
-            }
-            commandFound = true;
-        }
-        else if (inputString == "eyeflicker settings") {
-            printEyeFlickerSettings();
-            commandFound = true;
-        }
-        
-        // Audio commands
-        else if (inputString.startsWith("audiomode ")) {
-            int mode = safeParseInt(inputString.substring(10), -1, 0, 5);
-            if (mode >= 0) {
-                audioMode = mode;
-                Serial.print(F("> Audio mode set to: "));
-                Serial.println(AudioModeNames[mode]);
-            } else {
-                Serial.println(F("! Invalid audio mode (0-5)"));
-                failedCommands++;
-            }
-            commandFound = true;
-        }
-        else if (inputString == "resetpeak") {
-            audioProcessor.resetPeak();
-            Serial.println(F("> Audio peak reset"));
-            commandFound = true;
-        }
-        
-        // Brightness commands  
-        else if (inputString.startsWith("brightness ")) {
-            int bright = safeParseInt(inputString.substring(11), -1, 1, 255);
-            if (bright > 0) {
-                ledBrightness = bright;
-                FastLED.setBrightness(ledBrightness);
-                Serial.print(F("> Brightness set to: "));
-                Serial.println(bright);
-            } else {
-                Serial.println(F("! Brightness must be 1-255"));
-                failedCommands++;
-            }
-            commandFound = true;
-        }
-        
-        // Demo mode
-        else if (inputString == "demo on") {
-            demoMode = true;
-            Serial.println(F("> Demo mode enabled"));
-            commandFound = true;
-        }
-        else if (inputString == "demo off") {
+    }
+    // Pattern-specific colors
+    else if (inputString.startsWith("color ")) {
+        int color = inputString.substring(6).toInt();
+        if (color >= 0 && color < NUM_STANDARD_COLORS) {
+            solidColorIndex = color;
             demoMode = false;
-            Serial.println(F("> Demo mode disabled"));
-            commandFound = true;
+            Serial.print(F("Solid color: "));
+            Serial.println(ColorNames[color]);
+        } else {
+            Serial.print(F("Invalid color! Use 0-"));
+            Serial.println(NUM_STANDARD_COLORS - 1);
         }
-        
-        // Preset commands
-        else if (inputString.startsWith("saveuser ")) {
-            String params[2];
-            int paramCount;
-            
-            if (extractStringParams(inputString.substring(9), params, 2, paramCount)) {
-                int slot = safeParseInt(params[0], -1, 1, MAX_PRESETS);
-                if (slot > 0) {
-                    String presetName = "Preset " + String(slot);
-                    if (paramCount > 1 && params[1].length() > 0) {
-                        presetName = params[1];
-                        if (presetName.length() >= PRESET_NAME_LENGTH) {
-                            presetName = presetName.substring(0, PRESET_NAME_LENGTH - 1);
-                            Serial.println(F("! Preset name truncated"));
-                        }
-                    }
-                    
-                    PresetResult result = presetManager.savePreset(slot - 1, presetName.c_str());
-                    if (result == PRESET_SUCCESS) {
-                        Serial.print(F("> User preset "));
-                        Serial.print(slot);
-                        Serial.print(F(" saved as '"));
-                        Serial.print(presetName);
-                        Serial.println(F("'"));
-                    } else {
-                        Serial.print(F("! Failed to save preset (error "));
-                        Serial.print((int)result);
-                        Serial.println(F(")"));
-                        failedCommands++;
-                    }
-                } else {
-                    Serial.print(F("! Invalid preset slot (1-"));
-                    Serial.print(MAX_PRESETS);
-                    Serial.println(F(")"));
-                    failedCommands++;
-                }
+    }
+    else if (inputString.startsWith("solidmode ")) {
+        int mode = inputString.substring(10).toInt();
+        if (mode >= 0 && mode <= 1) {
+            solidMode = mode;
+            Serial.print(F("Solid mode: "));
+            Serial.println(mode == 0 ? "Static" : "Blink");
+        }
+    }
+    else if (inputString.startsWith("flashcolor ")) {
+        int color = inputString.substring(11).toInt();
+        if (color >= 0 && color < NUM_STANDARD_COLORS) {
+            flashColorIndex = color;
+            Serial.print(F("Flash color: "));
+            Serial.println(ColorNames[color]);
+        } else {
+            Serial.print(F("Invalid flash color! Use 0-"));
+            Serial.println(NUM_STANDARD_COLORS - 1);
+        }
+    }
+    else if (inputString.startsWith("flashspeed ")) {
+        int speed = inputString.substring(11).toInt();
+        if (speed >= 1 && speed <= 10) {
+            flashSpeed = speed;
+            Serial.print(F("Flash speed: "));
+            Serial.println(speed);
+        }
+    }
+    else if (inputString.startsWith("shortcolor ")) {
+        int color = inputString.substring(11).toInt();
+        if (color >= 0 && color < NUM_STANDARD_COLORS) {
+            shortColorIndex = color;
+            Serial.print(F("Short color: "));
+            Serial.println(ColorNames[color]);
+        } else {
+            Serial.print(F("Invalid short color! Use 0-"));
+            Serial.println(NUM_STANDARD_COLORS - 1);
+        }
+    }
+    else if (inputString.startsWith("knightcolor ")) {
+        int color = inputString.substring(12).toInt();
+        if (color >= 0 && color < NUM_STANDARD_COLORS) {
+            knightColorIndex = color;
+            Serial.print(F("Knight color: "));
+            Serial.println(ColorNames[color]);
+        } else {
+            Serial.print(F("Invalid knight color! Use 0-"));
+            Serial.println(NUM_STANDARD_COLORS - 1);
+        }
+    }
+    else if (inputString.startsWith("breathcolor ")) {
+        int color = inputString.substring(12).toInt();
+        if (color >= 0 && color < NUM_STANDARD_COLORS) {
+            breathingColorIndex = color;
+            Serial.print(F("Breath color: "));
+            Serial.println(ColorNames[color]);
+        } else {
+            Serial.print(F("Invalid breath color! Use 0-"));
+            Serial.println(NUM_STANDARD_COLORS - 1);
+        }
+    }
+    else if (inputString.startsWith("matrixcolor ")) {
+        int color = inputString.substring(12).toInt();
+        if (color >= 0 && color < NUM_STANDARD_COLORS) {
+            matrixColorIndex = color;
+            Serial.print(F("Matrix color: "));
+            Serial.println(ColorNames[color]);
+        } else {
+            Serial.print(F("Invalid matrix color! Use 0-"));
+            Serial.println(NUM_STANDARD_COLORS - 1);
+        }
+    }
+    else if (inputString.startsWith("strobecolor ")) {
+        int color = inputString.substring(12).toInt();
+        if (color >= 0 && color < NUM_STANDARD_COLORS) {
+            strobeColorIndex = color;
+            Serial.print(F("Strobe color: "));
+            Serial.println(ColorNames[color]);
+        } else {
+            Serial.print(F("Invalid strobe color! Use 0-"));
+            Serial.println(NUM_STANDARD_COLORS - 1);
+        }
+    }
+    else if (inputString.startsWith("confetti ")) {
+        int spaceIndex = inputString.indexOf(' ', 9);
+        if (spaceIndex > 0) {
+            int c1 = inputString.substring(9, spaceIndex).toInt();
+            int c2 = inputString.substring(spaceIndex + 1).toInt();
+            if (c1 >= 0 && c1 < NUM_STANDARD_COLORS && c2 >= 0 && c2 < NUM_STANDARD_COLORS) {
+                confettiColor1 = c1;
+                confettiColor2 = c2;
+                demoMode = false;
+                Serial.print(F("Confetti: "));
+                Serial.print(ColorNames[c1]);
+                Serial.print(F(" + "));
+                Serial.println(ColorNames[c2]);
             } else {
-                Serial.println(F("! Usage: saveuser <1-10> [name]"));
-                failedCommands++;
+                Serial.print(F("Invalid! Use: confetti <0-"));
+                Serial.print(NUM_STANDARD_COLORS - 1);
+                Serial.print(F("> <0-"));
+                Serial.print(NUM_STANDARD_COLORS - 1);
+                Serial.println(F(">"));
             }
-            commandFound = true;
         }
-        else if (inputString.startsWith("loaduser ")) {
-            int slot = safeParseInt(inputString.substring(9), -1, 1, MAX_PRESETS);
-            if (slot > 0) {
-                PresetResult result = presetManager.loadPreset(slot - 1);
-                if (result == PRESET_SUCCESS) {
-                    Serial.print(F("> User preset "));
-                    Serial.print(slot);
-                    Serial.println(F(" loaded"));
-                } else {
-                    Serial.print(F("! Failed to load preset (error "));
-                    Serial.print((int)result);
-                    Serial.println(F(")"));
-                    failedCommands++;
-                }
-            } else {
-                Serial.print(F("! Invalid preset slot (1-"));
-                Serial.print(MAX_PRESETS);
-                Serial.println(F(")"));
-                failedCommands++;
-            }
-            commandFound = true;
-        }
-        else if (inputString.startsWith("deleteuser ")) {
-            int slot = safeParseInt(inputString.substring(11), -1, 1, MAX_PRESETS);
-            if (slot > 0) {
-                PresetResult result = presetManager.deletePreset(slot - 1);
-                if (result == PRESET_SUCCESS) {
-                    Serial.print(F("> User preset "));
-                    Serial.print(slot);
-                    Serial.println(F(" deleted"));
-                } else {
-                    Serial.print(F("! Failed to delete preset (error "));
-                    Serial.print((int)result);
-                    Serial.println(F(")"));
-                    failedCommands++;
-                }
-            } else {
-                Serial.print(F("! Invalid preset slot (1-"));
-                Serial.print(MAX_PRESETS);
-                Serial.println(F(")"));
-                failedCommands++;
-            }
-            commandFound = true;
-        }
-        else if (inputString == "listpresets") {
-            Serial.println(F("> Saved Presets:"));
-            bool foundAny = false;
-            for (int i = 0; i < MAX_PRESETS; i++) {
-                if (presetManager.isSlotUsed(i)) {
-                    Serial.print(F("  Slot "));
-                    Serial.print(i + 1);
-                    Serial.print(F(": "));
-                    Serial.print(presetManager.getPresetName(i));
-                    Serial.print(F(" ("));
-                    Serial.print((millis() - presetManager.getPresetTimestamp(i)) / 1000);
-                    Serial.println(F("s ago)"));
-                    foundAny = true;
-                }
-            }
-            if (!foundAny) {
-                Serial.println(F("  No presets saved"));
-            }
-            commandFound = true;
-        }
-        else if (inputString.startsWith("presetinfo ")) {
-            int slot = safeParseInt(inputString.substring(11), -1, 1, MAX_PRESETS);
-            if (slot > 0) {
-                presetManager.printSlotInfo(slot - 1);
-            } else {
-                Serial.print(F("! Invalid preset slot (1-"));
-                Serial.print(MAX_PRESETS);
-                Serial.println(F(")"));
-                failedCommands++;
-            }
-            commandFound = true;
-        }
-        else if (inputString == "testleds") {
-            Serial.println(F("> Testing LED chaining configuration..."));
-            
-            // Clear all LEDs
-            fill_solid(bodyLEDsChained, TOTAL_BODY_LEDS, CRGB::Black);
-            fill_solid(DJLEDs_Eyes, NUM_EYES, CRGB::Black);
-            fill_solid(DJLEDs_Mouth, NUM_MOUTH_LEDS, CRGB::Black);
-            FastLED.show();
-            delay(500);
-            
-            // Test body panels sequentially
-            Serial.println(F("  Testing Right panel (red)"));
-            fill_solid(DJLEDs_Right, NUM_LEDS_PER_PANEL, CRGB::Red);
-            FastLED.show();
-            delay(1500);
-            fill_solid(DJLEDs_Right, NUM_LEDS_PER_PANEL, CRGB::Black);
-            
-            Serial.println(F("  Testing Middle panel (green)"));
-            fill_solid(DJLEDs_Middle, NUM_LEDS_PER_PANEL, CRGB::Green);
-            FastLED.show();
-            delay(1500);
-            fill_solid(DJLEDs_Middle, NUM_LEDS_PER_PANEL, CRGB::Black);
-            
-            Serial.println(F("  Testing Left panel (blue)"));
-            fill_solid(DJLEDs_Left, NUM_LEDS_PER_PANEL, CRGB::Blue);
-            FastLED.show();
-            delay(1500);
-            fill_solid(DJLEDs_Left, NUM_LEDS_PER_PANEL, CRGB::Black);
-            
-            // Test mouth and eyes
-            Serial.println(F("  Testing Mouth (yellow)"));
-            fill_solid(DJLEDs_Mouth, NUM_MOUTH_LEDS, CRGB::Yellow);
-            FastLED.show();
-            delay(1500);
-            fill_solid(DJLEDs_Mouth, NUM_MOUTH_LEDS, CRGB::Black);
-            
-            Serial.println(F("  Testing Eyes (white)"));
-            fill_solid(DJLEDs_Eyes, NUM_EYES, CRGB::White);
-            FastLED.show();
-            delay(1500);
-            fill_solid(DJLEDs_Eyes, NUM_EYES, CRGB::Black);
-            
-            FastLED.show();
-            Serial.println(F("> LED chaining test complete"));
-            commandFound = true;
-        }
-        else if (inputString == "validatehardware") {
-            validateHardwareConfiguration();
-            commandFound = true;
-        }
-        
-        // Handle unrecognized commands
-        if (!commandFound) {
-            Serial.print(F("! Unknown command: '"));
-            Serial.print(originalCommand);
-            Serial.println(F("'"));
-            Serial.println(F("  Type 'help' for available commands"));
-            failedCommands++;
-        }
-    } while(false);
+    }
+else if (inputString.startsWith("eyecolor ")) {
+    String colorStr = inputString.substring(9);
+    colorStr.trim();
+    int color = colorStr.toInt();
     
-    // Command cleanup
+    if (color >= 0 && color < NUM_STANDARD_COLORS) {
+        eyeColorIndex = color;
+        Serial.print(F("Eye color set to: "));
+        Serial.print(color);
+        Serial.print(F(" ("));
+        Serial.print(ColorNames[color]);
+        Serial.println(F(")"));
+    } else {
+        Serial.print(F("Invalid eye color! Use 0-"));
+        Serial.println(NUM_STANDARD_COLORS - 1);
+    }
+}
+    // Demo mode
+    else if (inputString == "demo on") {
+        demoMode = true;
+        demoPatternIndex = 1;
+        demoColorIndex = 0;
+        demoStep = 0;
+        lastDemoChange = millis();
+        currentPattern = demoPatternIndex;
+        Serial.print(F("Demo mode ON ("));
+        Serial.print(demoTime);
+        Serial.println(F("s)"));
+    }
+    else if (inputString == "demo off") {
+        demoMode = false;
+        Serial.println(F("Demo mode OFF"));
+    }
+    else if (inputString.startsWith("demotime ")) {
+        int time = inputString.substring(9).toInt();
+        if (time >= 5 && time <= 300) {
+            demoTime = time;
+            Serial.print(F("Demo time: "));
+            Serial.print(time);
+            Serial.println(F("s"));
+        }
+    }
+    // General settings
+    else if (inputString.startsWith("brightness ")) {
+        int bright = inputString.substring(11).toInt();
+        if (bright >= 1 && bright <= 255) {
+            ledBrightness = bright;
+            FastLED.setBrightness(ledBrightness);
+            Serial.print(F("Brightness: "));
+            Serial.println(bright);
+        }
+    }
+    else if (inputString.startsWith("eyebrightness ")) {
+        int bright = inputString.substring(14).toInt();
+        if (bright >= 50 && bright <= 200) {
+            eyeBrightness = bright;
+            Serial.print(F("Eye brightness: "));
+            Serial.print(bright);
+            Serial.println(F("%"));
+        } else {
+            Serial.println(F("Invalid! Use 50-200%"));
+        }
+    }
+    else if (inputString.startsWith("bodybrightness ")) {
+        int bright = inputString.substring(15).toInt();
+        if (bright >= 50 && bright <= 200) {
+            bodyBrightness = bright;
+            Serial.print(F("Body brightness: "));
+            Serial.print(bright);
+            Serial.println(F("%"));
+        } else {
+            Serial.println(F("Invalid! Use 50-200%"));
+        }
+    }
+    else if (inputString.startsWith("mouthouter ")) {
+        int boost = inputString.substring(11).toInt();
+        if (boost >= 50 && boost <= 200) {
+            mouthOuterBoost = boost;
+            Serial.print(F("Mouth outer boost: "));
+            Serial.print(boost);
+            Serial.println(F("%"));
+        } else {
+            Serial.println(F("Invalid! Use 50-200%"));
+        }
+    }
+    else if (inputString.startsWith("mouthinner ")) {
+        int boost = inputString.substring(11).toInt();
+        if (boost >= 50 && boost <= 200) {
+            mouthInnerBoost = boost;
+            Serial.print(F("Mouth inner boost: "));
+            Serial.print(boost);
+            Serial.println(F("%"));
+        } else {
+            Serial.println(F("Invalid! Use 50-200%"));
+        }
+    }
+    else if (inputString.startsWith("speed ")) {
+        int speed = inputString.substring(6).toInt();
+        if (speed >= 1 && speed <= 255) {
+            effectSpeed = speed;
+            Serial.print(F("Speed: "));
+            Serial.println(speed);
+        }
+    }
+    else if (inputString.startsWith("fade ")) {
+        int fade = inputString.substring(5).toInt();
+        if (fade >= 1 && fade <= 50) {
+            fadeSpeed = fade;
+            Serial.print(F("Fade: "));
+            Serial.println(fade);
+        }
+    }
+    else if (inputString.startsWith("sidetime ")) {
+        int spaceIndex = inputString.indexOf(' ', 9);
+        if (spaceIndex > 0) {
+            int minT = inputString.substring(9, spaceIndex).toInt();
+            int maxT = inputString.substring(spaceIndex + 1).toInt();
+            if (minT > 0 && maxT > minT && maxT <= 10000) {
+                sideMinTime = minT;
+                sideMaxTime = maxT;
+                Serial.print(F("Side time: "));
+                Serial.print(minT);
+                Serial.print(F("-"));
+                Serial.print(maxT);
+                Serial.println(F("ms"));
+            }
+        }
+    }
+    else if (inputString.startsWith("blocktime ")) {
+        int spaceIndex = inputString.indexOf(' ', 10);
+        if (spaceIndex > 0) {
+            int minT = inputString.substring(10, spaceIndex).toInt();
+            int maxT = inputString.substring(spaceIndex + 1).toInt();
+            if (minT > 0 && maxT > minT && maxT <= 10000) {
+                blockMinTime = minT;
+                blockMaxTime = maxT;
+                Serial.print(F("Block time: "));
+                Serial.print(minT);
+                Serial.print(F("-"));
+                Serial.print(maxT);
+                Serial.println(F("ms"));
+            }
+        }
+    }
+    else if (inputString.startsWith("audiothreshold ")) {
+        int thresh = inputString.substring(15).toInt();
+        if (thresh >= 50 && thresh <= 500) {
+            audioThreshold = thresh;
+            Serial.print(F("Audio threshold: "));
+            Serial.println(thresh);
+        }
+    }
+    // System commands
+    else if (inputString == "save") {
+        saveSettings();
+    }
+    else if (inputString == "load") {
+        loadSettings();
+        FastLED.setBrightness(ledBrightness);
+        printCurrentSettings();
+    }
+    else if (inputString == "reset") {
+        resetToDefaults();
+        FastLED.setBrightness(ledBrightness);
+        printCurrentSettings();
+    }
+    // User preset commands
+    else if (inputString.startsWith("saveuser ")) {
+        int preset = inputString.substring(9).toInt();
+        if (preset >= 1 && preset <= 3) {
+            saveUserPreset(preset);
+        } else {
+            Serial.println(F("Invalid preset! Use 1-3"));
+        }
+    }
+    else if (inputString.startsWith("loaduser ")) {
+        int preset = inputString.substring(9).toInt();
+        if (preset >= 1 && preset <= 3) {
+            if (loadUserPreset(preset)) {
+                printCurrentSettings();
+            }
+        } else {
+            Serial.println(F("Invalid preset! Use 1-3"));
+        }
+    }
+    else if (inputString.startsWith("deleteuser ")) {
+        int preset = inputString.substring(11).toInt();
+        if (preset >= 1 && preset <= 3) {
+            deleteUserPreset(preset);
+        } else {
+            Serial.println(F("Invalid preset! Use 1-3"));
+        }
+    }
+    else if (inputString == "listpresets") {
+        Serial.println(F("\n=== User Presets ==="));
+        for (int i = 1; i <= 3; i++) {
+            String presetKey = "preset" + String(i);
+            if (preferences.getBool((presetKey + "_saved").c_str(), false)) {
+                uint8_t pattern = preferences.getUChar((presetKey + "_pattern").c_str(), 0);
+                Serial.print(F("Preset "));
+                Serial.print(i);
+                Serial.print(F(": "));
+                Serial.print(patternNames[pattern]);
+                Serial.print(F(" (Pattern "));
+                Serial.print(pattern);
+                Serial.println(F(")"));
+            } else {
+                Serial.print(F("Preset "));
+                Serial.print(i);
+                Serial.println(F(": [Empty]"));
+            }
+        }
+        Serial.println(F("===================\n"));
+    }
+    else {
+        Serial.print(F("Unknown: "));
+        Serial.println(inputString);
+        Serial.println(F("Type 'help' for commands"));
+    }
+    
     inputString = "";
     stringComplete = false;
-    commandStartTime = 0;
-    commandInProgress = false;
-    
-    // Performance logging
-    unsigned long processingTime = millis() - commandProcessingStart;
-    if (processingTime > 100) { // Log slow commands
-        Serial.print(F("! Command took "));
-        Serial.print(processingTime);
-        Serial.println(F("ms to process"));
-    }
-}
 
-void resetSerialCommandStats() {
-    totalCommands = 0;
-    failedCommands = 0;
-    lastCommand = "";
-    lastCommandTime = 0;
-    repeatCommandCount = 0;
-    Serial.println(F("Serial command statistics reset"));
-}
-
-void printSerialCommandStats() {
-    Serial.println(F("=== Serial Command Statistics ==="));
-    Serial.print(F("Total Commands: "));
-    Serial.println(totalCommands);
-    Serial.print(F("Failed Commands: "));
-    Serial.println(failedCommands);
-    Serial.print(F("Success Rate: "));
-    if (totalCommands > 0) {
-        Serial.print(((totalCommands - failedCommands) * 100) / totalCommands);
-        Serial.println(F("%"));
-    } else {
-        Serial.println(F("100%"));
+    while (Serial.available()) {
+        Serial.read();
     }
-    Serial.print(F("Last Command: "));
-    Serial.println(lastCommand.length() > 0 ? lastCommand : "None");
-    Serial.print(F("Repeat Count: "));
-    Serial.println(repeatCommandCount);
-    Serial.println(F("================================"));
 }

@@ -1,13 +1,8 @@
 #ifndef GLOBALS_H
 #define GLOBALS_H
 
-// System includes first
-#include <Arduino.h>
+#include <FastLED.h>
 #include <Preferences.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-
-// Project config
 #include "config.h"
 
 // Settings storage
@@ -21,26 +16,29 @@ extern uint16_t sideMinTime;
 extern uint16_t sideMaxTime;
 extern uint16_t blockMinTime;
 extern uint16_t blockMaxTime;
+extern uint8_t beatsPerMinute;
 extern uint8_t fadeSpeed;
 extern uint8_t solidColorIndex;
 extern uint8_t confettiColor1;
 extern uint8_t confettiColor2;
 extern uint8_t eyeColorIndex;
-extern uint8_t eyeColorIndex2;
-extern uint8_t eyeMode;
 extern uint8_t solidMode;
-
-// Eye flicker control
-extern bool eyeFlickerEnabled;
-extern uint16_t eyeFlickerMinTime;
-extern uint16_t eyeFlickerMaxTime;
-extern uint8_t eyeStaticBrightness;
 
 // Brightness controls
 extern uint8_t eyeBrightness;
 extern uint8_t bodyBrightness;
 extern uint8_t mouthOuterBoost;
 extern uint8_t mouthInnerBoost;
+
+// Eye control variables
+extern uint8_t eyeColorIndex2; // NEU
+extern uint8_t eyeMode;        // NEU
+
+// Eye flicker control variables
+extern bool eyeFlickerEnabled;
+extern uint16_t eyeFlickerMinTime;
+extern uint16_t eyeFlickerMaxTime;
+extern uint8_t eyeStaticBrightness;
 
 // Block-specific colors
 extern uint8_t blockColors[9];
@@ -70,20 +68,20 @@ extern unsigned long matrixMillis;
 extern unsigned long strobeMillis;
 extern uint16_t knightInterval;
 extern uint16_t strobeInterval;
-extern uint8_t matrixDrops[3][SIDE_LEDS_COUNT];
-extern uint8_t matrixBright[3][SIDE_LEDS_COUNT];
+extern uint8_t matrixDrops[3][8];
+extern uint8_t matrixBright[3][8];
 
 // Mouth-specific parameters
 extern uint8_t mouthPattern;
 extern uint8_t mouthColorIndex;
-extern uint8_t mouthColorIndex2;
-extern uint8_t mouthSplitMode;
+extern uint8_t mouthColorIndex2; // NEU
+extern uint8_t mouthSplitMode;   // NEU
 extern uint8_t mouthBrightness;
 extern bool mouthEnabled;
 extern uint8_t talkSpeed;
 extern uint8_t smileWidth;
-extern uint8_t waveSpeed;
-extern uint8_t pulseSpeed;
+extern uint8_t waveSpeed;        // NEU
+extern uint8_t pulseSpeed;       // NEU
 
 // Solid Flash pattern variables
 extern uint8_t flashColorIndex;
@@ -102,42 +100,66 @@ extern uint8_t demoPatternIndex;
 extern uint8_t demoColorIndex;
 extern uint8_t demoStep;
 
-// Startup sequence variables
-extern bool startupComplete;
-extern unsigned long startupBeginTime;
-extern uint8_t startupPhase;
-extern bool panelActive[3];
-extern unsigned long panelActivationTime[3];
-
-// Pattern properties for demo mode
-struct PatternProperties {
-    bool hasColorVariations;
-    uint8_t* colorIndexPtr;
-    const char* colorName;
+// User preset structure
+struct UserPreset {
+    uint8_t pattern;
+    uint8_t brightness;
+    uint8_t speed;
+    uint8_t solidColor;
+    uint8_t eyeColor;
+    uint8_t mouthPattern;
+    uint8_t mouthColor;
+    uint8_t audioMode;
+    uint8_t blockColors[9];
+    uint8_t sideColors[3];
+    uint8_t sideMode;
 };
-extern const PatternProperties patternProps[NUM_PATTERNS];
 
 // Audio processing
+extern int audioLevel;
 extern int audioThreshold;
+extern unsigned long lastAudioRead;
+extern int audioSamples[10];
+extern int averageAudio;
+extern uint8_t audioSampleIdx;
 extern uint8_t audioMode;
 extern uint8_t audioSensitivity;
 extern bool audioAutoGain;
+extern int audioMinLevel;
+extern int audioMaxLevel;
 
 // Timing arrays
 extern uint16_t IntervalTime[TOTAL_BODY_LEDS];
 extern unsigned long LEDMillis[TOTAL_BODY_LEDS];
 extern bool LEDOn[TOTAL_BODY_LEDS];
 
-// LED arrays for ESP32-C3 configuration
-// Body panels chained on IO3, Eyes on IO6, Mouth on IO7 (all separate)
-extern CRGB bodyLEDsChained[TOTAL_BODY_LEDS];   // Right->Middle->Left on IO3
-extern CRGB DJLEDs_Eyes[NUM_EYES];              // Eyes on IO6 (separate)
-extern CRGB DJLEDs_Mouth[NUM_MOUTH_LEDS];       // Mouth on IO7 (separate)
+// LED arrays
+extern CRGB DJLEDs_Right[NUM_LEDS_PER_PANEL];
+extern CRGB DJLEDs_Middle[NUM_LEDS_PER_PANEL];
+extern CRGB DJLEDs_Left[NUM_LEDS_PER_PANEL];
+extern CRGB DJLEDs_Eyes[NUM_EYES];
+extern CRGB DJLEDs_Mouth[NUM_MOUTH_LEDS];
 
-// Virtual LED array pointers for body panels (for code compatibility)
-extern CRGB* DJLEDs_Right;    // Points to bodyLEDsChained[0]  (LEDs 0-19)
-extern CRGB* DJLEDs_Middle;   // Points to bodyLEDsChained[20] (LEDs 20-39)
-extern CRGB* DJLEDs_Left;     // Points to bodyLEDsChained[40] (LEDs 40-59)
+// ...
+// LED arrays
+extern CRGB DJLEDs_Right[NUM_LEDS_PER_PANEL];
+extern CRGB DJLEDs_Middle[NUM_LEDS_PER_PANEL];
+extern CRGB DJLEDs_Left[NUM_LEDS_PER_PANEL];
+extern CRGB DJLEDs_Eyes[NUM_EYES];
+extern CRGB DJLEDs_Mouth[NUM_MOUTH_LEDS];
+
+//Arrays to store the state of the old pattern for transitions
+extern CRGB old_DJLEDs_Right[NUM_LEDS_PER_PANEL];
+extern CRGB old_DJLEDs_Middle[NUM_LEDS_PER_PANEL];
+extern CRGB old_DJLEDs_Left[NUM_LEDS_PER_PANEL];
+extern CRGB old_DJLEDs_Eyes[NUM_EYES];
+extern CRGB old_DJLEDs_Mouth[NUM_MOUTH_LEDS];
+
+//Transition control variables
+extern bool transitionActive;
+extern unsigned long transitionStartTime;
+extern int8_t requestedPattern; // Used to trigger a transition from serial commands
+const uint16_t transitionDuration = 1000; // Define const here to make it visible everywhere
 
 // Eyes variables
 extern uint16_t EyesIntervalTime[NUM_EYES];
@@ -163,38 +185,26 @@ extern const CRGB StandardColors[NUM_STANDARD_COLORS];
 extern const char* ColorNames[NUM_STANDARD_COLORS];
 extern const char* SideColorModeNames[5];
 extern const char* MouthPatternNames[NUM_MOUTH_PATTERNS];
-extern const char* MouthSplitModeNames[5];
-extern const char* AudioModeNames[6];
-extern const char* EyeModeNames[5];
+extern const char* EyeModeNames[3];
+extern const char* MouthSplitNames[5];
+extern const char* AudioModeNames[5];
 extern const char* patternNames[NUM_PATTERNS];
+
+
+// Playlist
+struct PlaylistEntry {
+    uint8_t pattern;
+    uint16_t duration; // in Sekunden
+};
+
+extern PlaylistEntry playlist[10];
+extern uint8_t playlistSize;
+extern bool playlistActive;
+extern uint8_t playlistIndex;
+extern unsigned long playlistPatternStartTime;
 
 // Pattern function list
 typedef void (*SimplePatternList[])();
 extern SimplePatternList gPatterns;
-
-// Thread synchronization
-extern SemaphoreHandle_t ledMutex;
-extern volatile bool patternUpdating;
-
-// Demo mode state preservation
-extern uint8_t savedPattern;
-extern bool savedDemoState;
-
-// Smooth color transitions
-extern uint8_t colorFadeSteps;
-extern bool enableSmoothTransitions;
-
-// System state
-extern bool systemReady;
-extern unsigned long bootTime;
-
-// Serial command globals
-extern String inputString;
-extern boolean stringComplete;
-
-extern uint32_t failedCommands;
-
-// Hardware validation function
-void validateHardwareConfiguration();
 
 #endif

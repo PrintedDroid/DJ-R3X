@@ -9,10 +9,9 @@ void processSerialCommand();
 void printHelp();
 void printCurrentSettings();
 void printBlockColors();
-void printSystemInfo();
 
-#if ENABLE_MEMORY_MONITORING
-void printMemoryStatus();
-#endif
+void printCurrentSettings();
+void printBlockColors();
+void parsePlaylistCommand(String command);
 
 #endif
