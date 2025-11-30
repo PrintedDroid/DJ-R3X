@@ -22,24 +22,27 @@
 #define NUM_MOUTH_LEDS 80
 #define TOTAL_BODY_LEDS (NUM_LEDS_PER_PANEL * 3)  // = 60
 
-// Pin definitions for ESP32-C3 (CORRECTED for chained configuration)
+// Pin definitions for ESP32-C3
+// Original: separate pins per panel (had issues with individual control)
+// Current: panels chained on single pin, eyes and mouth separate
 const uint8_t BODY_CHAIN_PIN = 3;      // IO3 - Right->Middle->Left (chained)
-const uint8_t MOUTH_EYES_PIN = 7;      // IO7 - Mouth->Eyes (chained)
-const uint8_t MIC_PIN = 1;             // IO1 - Microphone (confirmed)
+const uint8_t EYES_PIN_ACTIVE = 6;     // IO6 - Eyes (separate)
+const uint8_t MOUTH_PIN_ACTIVE = 7;    // IO7 - Mouth (separate)
+const uint8_t MIC_PIN = 1;             // IO1 - Microphone
 
 // Status LED - DISABLED (not present in hardware)
 #define ENABLE_STATUS_LED false
 const uint8_t STATUS_LED_PIN = 8;      // IO8 - Not used
 
 // Legacy pin definitions (for code compatibility)
-const uint8_t LED_PIN_RIGHT = BODY_CHAIN_PIN;    // Points to chained strip
-const uint8_t LED_PIN_MIDDLE = BODY_CHAIN_PIN;   // Same physical strip
-const uint8_t LED_PIN_LEFT = BODY_CHAIN_PIN;     // Same physical strip  
-const uint8_t EYES_MOUTH_PIN = MOUTH_EYES_PIN;   // Corrected to IO7
+const uint8_t LED_PIN_RIGHT = 3;       // Original separate pin
+const uint8_t LED_PIN_MIDDLE = 4;      // Original separate pin
+const uint8_t LED_PIN_LEFT = 5;        // Original separate pin
+const uint8_t EYES_MOUTH_PIN = 6;      // Legacy compatibility
 
 // For compatibility with existing code
-#define EYES_PIN MOUTH_EYES_PIN
-#define MOUTH_PIN MOUTH_EYES_PIN
+#define EYES_PIN EYES_PIN_ACTIVE
+#define MOUTH_PIN MOUTH_PIN_ACTIVE
 
 // LED hardware configuration
 #define LED_TYPE    WS2812B

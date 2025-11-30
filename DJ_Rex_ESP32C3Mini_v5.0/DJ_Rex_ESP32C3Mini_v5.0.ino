@@ -24,8 +24,12 @@
 //
 //  PINOUT & RMT CHANNELS:
 //  - RMT CH0 (IO3):  Body Panels (Right -> Middle -> Left, chained)
-//  - RMT CH1 (IO7):  Mouth -> Eyes (chained)
+//  - RMT CH1 (IO6):  Eyes (2 LEDs, separate)
+//  - RMT CH2 (IO7):  Mouth (80 LEDs, separate)
 //  - MIC_PIN (IO1):  Analog microphone input for audio reactivity
+//
+//  Original separate pins (had issues, now chained):
+//  - IO3: Right, IO4: Middle, IO5: Left
 //
 //  ==============================================================================
 //
@@ -303,8 +307,8 @@ void setup() {
     Serial.println(F("DJ Rex ESP32-C3 v5.0.0 - MERGED EDITION"));
     Serial.println(F("Build: " FIRMWARE_DATE));
     Serial.println(F("========================================"));
-    Serial.println(F("Hardware: ESP32-C3 Mini - 2 RMT channels"));
-    Serial.println(F("Body: 3x20 LEDs, Eyes: 2, Mouth: 80"));
+    Serial.println(F("Hardware: ESP32-C3 Mini - 3 RMT channels"));
+    Serial.println(F("Body: 3x20 LEDs (IO3), Eyes: 2 (IO6), Mouth: 80 (IO7)"));
     Serial.println(F("Features: 20 colors + 20 patterns + 15 mouth modes"));
     Serial.println(F("Audio: Beat detection and frequency analysis"));
     Serial.println(F("Thread-safe LED operations enabled"));
@@ -359,23 +363,28 @@ void setup() {
     initSettings();
     Serial.println(F("Settings loaded"));
 
-    // Configure LED strips for ESP32-C3 with chained configuration
+    // Configure LED strips for ESP32-C3
+    // Body panels chained on IO3, Eyes on IO6, Mouth on IO7 (all separate)
     Serial.println(F("Initializing LED strips for ESP32-C3..."));
     try {
         // RMT Channel 0: Body panels chained (Right->Middle->Left on IO3)
         FastLED.addLeds<LED_TYPE, BODY_CHAIN_PIN, COLOR_ORDER>(bodyLEDsChained, TOTAL_BODY_LEDS);
         Serial.println(F("Body chain: Right->Middle->Left on IO3"));
-        
-        // RMT Channel 1: Mouth->Eyes chained (on IO7)
-        FastLED.addLeds<LED_TYPE, MOUTH_EYES_PIN, COLOR_ORDER>(eyesMouthLEDs, NUM_EYES + NUM_MOUTH_LEDS);
-        Serial.println(F("Mouth+Eyes: Mouth->Eyes on IO7"));
-        
-        Serial.println(F("ESP32-C3: Both RMT channels configured successfully"));
-        
+
+        // RMT Channel 1: Eyes on IO6 (separate)
+        FastLED.addLeds<LED_TYPE, EYES_PIN_ACTIVE, COLOR_ORDER>(DJLEDs_Eyes, NUM_EYES);
+        Serial.println(F("Eyes: IO6 (2 LEDs)"));
+
+        // RMT Channel 2: Mouth on IO7 (separate)
+        FastLED.addLeds<LED_TYPE, MOUTH_PIN_ACTIVE, COLOR_ORDER>(DJLEDs_Mouth, NUM_MOUTH_LEDS);
+        Serial.println(F("Mouth: IO7 (80 LEDs)"));
+
+        Serial.println(F("ESP32-C3: All 3 RMT channels configured successfully"));
+
     } catch (...) {
         Serial.println(F("CRITICAL ERROR: LED strip initialization failed!"));
         setStatusLED(STATUS_ERROR);
-        while(1) { 
+        while(1) {
             delay(1000);
             updateStatusLED();
         }
