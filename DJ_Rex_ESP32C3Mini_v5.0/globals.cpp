@@ -110,20 +110,16 @@ uint16_t IntervalTime[TOTAL_BODY_LEDS];
 unsigned long LEDMillis[TOTAL_BODY_LEDS];
 bool LEDOn[TOTAL_BODY_LEDS];
 
-// CORRECTED LED arrays for ESP32-C3 chained configuration
-// Physical LED strips (actual hardware connections)
-CRGB bodyLEDsChained[TOTAL_BODY_LEDS];           // Right->Middle->Left on IO3
-CRGB eyesMouthLEDs[NUM_EYES + NUM_MOUTH_LEDS];   // Mouth->Eyes on IO7
+// LED arrays for ESP32-C3 configuration
+// Body panels chained on IO3, Eyes on IO6, Mouth on IO7 (all separate)
+CRGB bodyLEDsChained[TOTAL_BODY_LEDS];   // Right->Middle->Left on IO3
+CRGB DJLEDs_Eyes[NUM_EYES];              // Eyes on IO6 (separate)
+CRGB DJLEDs_Mouth[NUM_MOUTH_LEDS];       // Mouth on IO7 (separate)
 
-// Virtual LED array pointers (for code compatibility)
-// These point to sections within the physical chained arrays
+// Virtual LED array pointers for body panels (for code compatibility)
 CRGB* DJLEDs_Right = &bodyLEDsChained[0];                          // LEDs 0-19
 CRGB* DJLEDs_Middle = &bodyLEDsChained[NUM_LEDS_PER_PANEL];        // LEDs 20-39
 CRGB* DJLEDs_Left = &bodyLEDsChained[NUM_LEDS_PER_PANEL * 2];      // LEDs 40-59
-
-// Eyes and Mouth within chained strip (Mouth->Eyes configuration on IO7)
-CRGB* DJLEDs_Mouth = &eyesMouthLEDs[0];                    // LEDs 0-79 (Mouth first)
-CRGB* DJLEDs_Eyes = &eyesMouthLEDs[NUM_MOUTH_LEDS];        // LEDs 80-81 (Eyes follow)
 
 // Eyes variables
 uint16_t EyesIntervalTime[NUM_EYES];
