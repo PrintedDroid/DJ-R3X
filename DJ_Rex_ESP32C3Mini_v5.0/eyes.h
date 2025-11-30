@@ -6,7 +6,8 @@
 
 void initializeEyes();
 void updateEyes();
-CRGB getEyeColor(uint8_t eyeIndex);
+
+// NEW: Function to display eye flicker settings
 void printEyeFlickerSettings();
 
 #endif

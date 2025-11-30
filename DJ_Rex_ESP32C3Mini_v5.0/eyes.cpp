@@ -3,7 +3,7 @@
 
 void initializeEyes() {
     for (byte x = 0; x < NUM_EYES; x++) {
-        EyesIntervalTime[x] = random(200, 1600);
+        EyesIntervalTime[x] = random(eyeFlickerMinTime, eyeFlickerMaxTime);
         EyesLEDMillis[x] = millis();
         EyesLEDOn[x] = 0;
         EyesLEDBrightness[x] = ledBrightness;
@@ -11,71 +11,63 @@ void initializeEyes() {
     }
 }
 
-CRGB getEyeColor(uint8_t eyeIndex) {
-    CRGB color;
-    
+void updateEyes() {
+    CRGB eyeColors[NUM_EYES];
+
+    // Determine the color for each eye based on the current eyeMode
     switch (eyeMode) {
-        case EYE_MODE_SINGLE:
-            // Both eyes use primary color
-            color = getColor(eyeColorIndex);
+        case 0: // Single Color
+            eyeColors[0] = getColor(eyeColorIndex);
+            eyeColors[1] = getColor(eyeColorIndex);
             break;
-            
-        case EYE_MODE_DUAL:
-            // Each eye uses its own color
-            if (eyeIndex == 0) {
-                color = getColor(eyeColorIndex);
-            } else {
-                color = getColor(eyeColorIndex2);
+
+        case 1: // Dual Color
+            eyeColors[0] = getColor(eyeColorIndex);  // Eye 1 (Right) is the primary color
+            eyeColors[1] = getColor(eyeColorIndex2); // Eye 2 (Left) is the secondary color
+            break;
+
+        case 2: // Alternating
+            {
+                static bool alternateState = false;
+                // Flip the state every 500ms
+                EVERY_N_MILLISECONDS(500) {
+                    alternateState = !alternateState;
+                }
+
+                if (alternateState) {
+                    eyeColors[0] = getColor(eyeColorIndex);
+                    eyeColors[1] = getColor(eyeColorIndex2);
+                } else {
+                    eyeColors[0] = getColor(eyeColorIndex2);
+                    eyeColors[1] = getColor(eyeColorIndex);
+                }
             }
             break;
-            
-        case EYE_MODE_ALTERNATE:
-            // Eyes alternate between two colors
-            static unsigned long lastAlternate = 0;
-            static bool alternateState = false;
-            
-            if (millis() - lastAlternate > 2000) { // Switch every 2 seconds
-                lastAlternate = millis();
-                alternateState = !alternateState;
-            }
-            
-            if ((eyeIndex == 0 && !alternateState) || (eyeIndex == 1 && alternateState)) {
-                color = getColor(eyeColorIndex);
-            } else {
-                color = getColor(eyeColorIndex2);
-            }
-            break;
-            
-        default:
-            color = getColor(eyeColorIndex);
+        
+        default: // Fallback to Single Color
+            eyeColors[0] = getColor(eyeColorIndex);
+            eyeColors[1] = getColor(eyeColorIndex);
             break;
     }
-    
-    // Apply eye brightness boost
-    color.r = min(255, (color.r * eyeBrightness) / 100);
-    color.g = min(255, (color.g * eyeBrightness) / 100);
-    color.b = min(255, (color.b * eyeBrightness) / 100);
-    
-    return color;
-}
 
-void updateEyes() {
+    // Apply the flicker or static logic using the determined colors
     if (!eyeFlickerEnabled) {
-        // Static mode - Eyes always on with configured brightness
+        // Static eyes mode
         for (int pos = 0; pos < NUM_EYES; pos++) {
-            CRGB eyeColor = getEyeColor(pos);
-            
-            // Apply static brightness instead of dynamic brightness
-            eyeColor.r = (eyeColor.r * eyeStaticBrightness) / 255;
-            eyeColor.g = (eyeColor.g * eyeStaticBrightness) / 255;
-            eyeColor.b = (eyeColor.b * eyeStaticBrightness) / 255;
-            
-            DJLEDs_Eyes[pos] = eyeColor;
+            DJLEDs_Eyes[pos] = eyeColors[pos]; // Use the color determined by eyeMode
+
+            // Apply eye brightness boost
+            DJLEDs_Eyes[pos].r = min(255, (DJLEDs_Eyes[pos].r * eyeBrightness) / 100);
+            DJLEDs_Eyes[pos].g = min(255, (DJLEDs_Eyes[pos].g * eyeBrightness) / 100);
+            DJLEDs_Eyes[pos].b = min(255, (DJLEDs_Eyes[pos].b * eyeBrightness) / 100);
+
+            // Apply static brightness setting
+            DJLEDs_Eyes[pos].fadeToBlackBy(255 - eyeStaticBrightness);
         }
         return;
     }
     
-    // Original flicker logic with configurable timing
+    // Original flicker animation
     for (int pos = 0; pos < NUM_EYES; pos++) {
         if (!EyesLEDOn[pos]) {
             DJLEDs_Eyes[pos].maximizeBrightness(EyesLEDBrightness[pos]);
@@ -87,39 +79,47 @@ void updateEyes() {
         
         if (millis() - EyesLEDMillis[pos] > EyesIntervalTime[pos]) {
             if (!EyesLEDOn[pos]) {
-                DJLEDs_Eyes[pos] = getEyeColor(pos);
+                DJLEDs_Eyes[pos] = eyeColors[pos]; // Use the color determined by eyeMode
+
+                // Apply eye brightness boost
+                DJLEDs_Eyes[pos].r = min(255, (DJLEDs_Eyes[pos].r * eyeBrightness) / 100);
+                DJLEDs_Eyes[pos].g = min(255, (DJLEDs_Eyes[pos].g * eyeBrightness) / 100);
+                DJLEDs_Eyes[pos].b = min(255, (DJLEDs_Eyes[pos].b * eyeBrightness) / 100);
                 
-                // Use configurable flicker timing instead of hardcoded values
                 EyesIntervalTime[pos] = random(eyeFlickerMinTime, eyeFlickerMaxTime);
                 EyesLEDMillis[pos] = millis();
                 EyesLEDOn[pos] = 1;
                 EyesLEDMinBrightness[pos] = random(ledBrightness * 0.2, ledBrightness);
             } else {
-                // Use configurable timing for off period too
                 EyesIntervalTime[pos] = random(eyeFlickerMinTime, eyeFlickerMaxTime + 400);
                 EyesLEDMillis[pos] = millis();
                 EyesLEDOn[pos] = 0;
             }
         }
     }
-} // <<--- DIESE KLAMMER HAT GEFEHLT UND BEENDET DIE updateEyes() FUNKTION
+}
 
-// Diese Funktion steht jetzt für sich allein, außerhalb von updateEyes()
+// NEW: Function to print current eye flicker settings
 void printEyeFlickerSettings() {
-    Serial.println(F("--- Eye Flicker Settings ---"));
-    Serial.print(F("  Flicker Enabled: "));
-    Serial.println(eyeFlickerEnabled ? "ON" : "OFF");
-
-    if (eyeFlickerEnabled) {
-        Serial.print(F("  Min Time: "));
-        Serial.print(eyeFlickerMinTime);
-        Serial.println(F(" ms"));
-        Serial.print(F("  Max Time: "));
-        Serial.print(eyeFlickerMaxTime);
-        Serial.println(F(" ms"));
-    } else {
-        Serial.print(F("  Static Brightness: "));
-        Serial.println(eyeStaticBrightness);
-    }
-    Serial.println(F("--------------------------"));
+    Serial.println(F("\n=== Eye Flicker Settings ==="));
+    Serial.print(F("Flicker Enabled: "));
+    Serial.println(eyeFlickerEnabled ? "YES" : "NO");
+    Serial.print(F("Flicker Min Time: "));
+    Serial.print(eyeFlickerMinTime);
+    Serial.println(F("ms"));
+    Serial.print(F("Flicker Max Time: "));
+    Serial.print(eyeFlickerMaxTime);
+    Serial.println(F("ms"));
+    Serial.print(F("Static Brightness: "));
+    Serial.print(eyeStaticBrightness);
+    Serial.println(F("/255"));
+    Serial.print(F("Eye Color: "));
+    Serial.print(eyeColorIndex);
+    Serial.print(F(" ("));
+    Serial.print(ColorNames[eyeColorIndex]);
+    Serial.println(F(")"));
+    Serial.print(F("Eye Brightness: "));
+    Serial.print(eyeBrightness);
+    Serial.println(F("%"));
+    Serial.println(F("===========================\n"));
 }

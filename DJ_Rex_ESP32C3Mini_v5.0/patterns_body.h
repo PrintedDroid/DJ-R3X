@@ -1,7 +1,8 @@
 #ifndef PATTERNS_BODY_H
 #define PATTERNS_BODY_H
 
-#include "globals.h"  // globals.h hat bereits alle notwendigen includes
+#include "config.h"
+#include "globals.h"
 
 // Pattern functions
 void LEDsOff();
@@ -21,11 +22,8 @@ void matrixRain();
 void strobePattern();
 void audioVUMeter();
 void CustomBlockSequence();
-void plasmaPattern();
-void firePattern();
-void twinklePattern();
 
-// Helper functions
+// Helper for rainbow
 void addGlitter(fract8 chanceOfGlitter);
 
 // Initialize pattern list
