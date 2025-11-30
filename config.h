@@ -57,7 +57,9 @@
 // =============================================================================
 // v5.0 NEW: FREERTOS & THREAD SAFETY
 // =============================================================================
-#define ENABLE_FREERTOS_AUDIO true
+// NOTE: Disabled by default on ESP32-C3 (single-core) to prevent LED flickering
+// Enable only on dual-core ESP32 chips
+#define ENABLE_FREERTOS_AUDIO false
 #define AUDIO_TASK_STACK_SIZE 4096
 #define AUDIO_TASK_PRIORITY 2
 #define AUDIO_SAMPLE_INTERVAL_MS 5
