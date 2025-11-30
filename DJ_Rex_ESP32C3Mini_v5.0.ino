@@ -139,8 +139,11 @@ void audioTask(void* parameter) {
 
 void setup() {
     Serial.begin(115200);
-    delay(1000);
-    while (!Serial) {
+
+    // Wait for Serial with timeout (max 2 seconds)
+    // Without this timeout, system hangs when Serial Monitor is not open
+    unsigned long serialTimeout = millis();
+    while (!Serial && (millis() - serialTimeout < 2000)) {
         delay(10);
     }
 
