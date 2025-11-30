@@ -338,6 +338,27 @@ Connect via Serial Monitor at **115200 baud**.
 | `demo off` | Disable demo mode |
 | `demotime <seconds>` | Set demo pattern duration |
 
+#### Demo Mode Features
+
+The advanced demo mode automatically cycles through body patterns, mouth patterns, and eye modes to showcase all capabilities.
+
+- **Smart Pattern Cycling:** Curated selection of 13 body patterns and 10 mouth patterns
+- **New v5.0 Patterns Included:** Plasma, Fire, Twinkle, Matrix, Heartbeat, Spectrum
+- **Full Animation:** Cycles through different mouth animations synchronized with body patterns
+- **Automatic Color Variation:** Colors change every few cycles for variety
+- **Audio Patterns:** Demo includes Audio Sync and VU Meter patterns
+- **State Preservation:** When demo mode is disabled, system continues with last active pattern
+
+**Demo Pattern Rotation:**
+```
+Body: Random Blocks → Rainbow → Rainbow Glitter → Confetti → Juggle →
+      Knight Rider → Breathing → Matrix Rain → Plasma → Fire →
+      Twinkle → Audio Sync → Audio VU Meter
+
+Mouth: Talk → Smile → Rainbow → Wave → Pulse → Sparkle →
+       Matrix → Heartbeat → Audio Reactive → Spectrum
+```
+
 ### Playlist Control
 
 | Command | Description |
@@ -379,6 +400,204 @@ This creates a playlist: Rainbow (15s) → Breathing (20s) → Confetti (15s) �
 | `startup` | Show startup sequence status |
 | `startup on` | Enable startup sequence |
 | `startup off` | Disable startup sequence |
+
+---
+
+## Usage Examples
+
+### Quick Start
+
+Get up and running in seconds:
+
+```bash
+help                    # Show all available commands
+status                  # Display current settings
+demo on                 # Start the full demo mode
+demotime 20             # Set demo to 20 seconds per pattern
+```
+
+### Basic Pattern Control
+
+```bash
+S 5                     # Set Rainbow pattern
+next                    # Go to next pattern
+random                  # Jump to random pattern
+B 150                   # Set global brightness to 150
+save                    # Save current settings
+```
+
+### Advanced Custom Setup
+
+Create a fully customized look:
+
+```bash
+# Body configuration
+S 16                    # Set to "Custom Block Sequence" pattern
+bodybright 120          # Set body brightness to 120%
+
+# Eye configuration
+eyemode 2               # Set eyes to alternate between colors
+eyecolor 3              # Set primary eye color to Warm White
+eyecolor2 2             # Set secondary eye color to Blue
+eyeflicker on           # Enable natural flicker effect
+eyeflickertime 200 1200 # Set flicker timing
+
+# Mouth configuration
+mouth 7                 # Set mouth pattern to "Pulse"
+mouthsplit 1            # Split mouth color vertically (left/right)
+mouthcolor 2            # Set primary mouth color to Blue
+mouthcolor2 0           # Set secondary mouth color to Red
+mouthbright 100         # Set mouth brightness
+
+# Save everything
+save                    # Save the full configuration to flash
+```
+
+### Audio Reactive Setup
+
+Configure for music/sound response:
+
+```bash
+# Body audio reactive
+S 15                    # Set body to "Audio VU Meter"
+
+# Mouth audio reactive
+mouth 14                # Set mouth to "Spectrum" analyzer (v5.0)
+
+# Audio system configuration
+audio 4                 # Set everything to be audio reactive
+sensitivity 6           # Set audio sensitivity to 6/10
+autogain on             # Enable automatic gain control
+
+# Alternative: Body audio sync with mouth spectrum
+S 9                     # Body: "Audio Sync" (color changes)
+mouth 14                # Mouth: "Spectrum" analyzer
+
+save                    # Save settings
+```
+
+### Party/DJ Setup
+
+High-energy configuration for events:
+
+```bash
+# Fast-changing patterns
+S 14                    # Strobe pattern
+mouth 11                # Sparkle mouth effect
+
+# Or use audio reactive
+S 9                     # Audio Sync body
+mouth 3                 # Audio Reactive mouth
+audio 4                 # Full audio reactivity
+sensitivity 8           # High sensitivity for loud music
+
+# Bright settings
+B 255                   # Maximum brightness
+mouthbright 200         # Boost mouth brightness
+```
+
+### Ambient/Display Setup
+
+Calm, atmospheric configuration:
+
+```bash
+# Gentle patterns
+S 12                    # Breathing pattern
+mouth 7                 # Pulse mouth effect
+
+# Warm colors
+solidcolor 14           # Amber color for breathing
+mouthcolor 3            # Warm White for mouth
+eyecolor 14             # Amber eyes
+
+# Subtle brightness
+B 80                    # Lower overall brightness
+eyeflicker off          # Disable eye flicker for calm look
+
+save
+```
+
+### v5.0 New Patterns Showcase
+
+Try the new patterns:
+
+```bash
+# Fire effect
+S 18                    # Fire pattern (v5.0)
+mouth 13                # Heartbeat mouth (v5.0)
+
+# Plasma effect
+S 17                    # Plasma pattern (v5.0)
+mouth 12                # Matrix mouth (v5.0)
+
+# Twinkle stars
+S 19                    # Twinkle pattern (v5.0)
+mouth 11                # Sparkle mouth
+
+# Audio spectrum
+S 15                    # Audio VU Meter body
+mouth 14                # Spectrum analyzer mouth (v5.0)
+audio 4                 # Full audio mode
+```
+
+### Playlist Configuration
+
+Set up automated pattern sequences:
+
+```bash
+# Create a playlist: pattern,duration pairs separated by semicolons
+playlist 5,15;17,20;18,15;12,20;19,15
+
+# This creates:
+# - Rainbow (5) for 15 seconds
+# - Plasma (17) for 20 seconds
+# - Fire (18) for 15 seconds
+# - Breathing (12) for 20 seconds
+# - Twinkle (19) for 15 seconds
+
+playlist on             # Start the playlist
+playlist show           # View current playlist
+playlist save           # Save playlist to flash (persists after reboot)
+
+# Later, load saved playlist
+playlist load           # Restore saved playlist
+playlist on             # Start it
+```
+
+### Preset Management
+
+Save and recall complete configurations:
+
+```bash
+# Save current setup to preset slot 1 with a name
+preset save 1 PartyMode
+
+# Save another configuration
+S 12
+mouth 7
+preset save 2 Ambient
+
+# List all presets
+preset list
+
+# Load a preset
+preset load 1           # Load "PartyMode"
+preset load 2           # Load "Ambient"
+
+# Delete a preset
+preset delete 3
+```
+
+### System Monitoring
+
+Check system health:
+
+```bash
+sysinfo                 # Show memory, loops/sec, health status
+eventlog                # View system event history
+eventlog clear          # Clear the event log
+restart                 # Restart the system
+```
 
 ---
 
