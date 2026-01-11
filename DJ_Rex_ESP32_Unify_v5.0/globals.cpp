@@ -96,17 +96,18 @@ uint8_t demoColorIndex = 0;
 uint8_t demoStep = 0;
 
 // Audio
-int audioLevel = 0;
-int audioThreshold = 100;
+// v5.0.1: Marked as volatile for thread-safety (FreeRTOS audio task on S3)
+volatile int audioLevel = 0;
+volatile int audioThreshold = 100;
 unsigned long lastAudioRead = 0;
-int audioSamples[10] = {0};
-int averageAudio = 0;
-uint8_t audioSampleIdx = 0;
+volatile int audioSamples[10] = {0};
+volatile int averageAudio = 0;
+volatile uint8_t audioSampleIdx = 0;
 uint8_t audioMode = AUDIO_ALL;
 uint8_t audioSensitivity = 5;
 bool audioAutoGain = true;
-int audioMinLevel = 4095;
-int audioMaxLevel = 0;
+volatile int audioMinLevel = 4095;
+volatile int audioMaxLevel = 0;
 
 // Timing arrays
 uint16_t IntervalTime[TOTAL_BODY_LEDS];
