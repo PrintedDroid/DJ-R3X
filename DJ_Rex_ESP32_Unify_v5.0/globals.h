@@ -116,17 +116,18 @@ struct UserPreset {
 };
 
 // Audio processing
-extern int audioLevel;
-extern int audioThreshold;
+// v5.0.1: Marked as volatile for thread-safety (FreeRTOS audio task on S3)
+extern volatile int audioLevel;
+extern volatile int audioThreshold;
 extern unsigned long lastAudioRead;
-extern int audioSamples[10];
-extern int averageAudio;
-extern uint8_t audioSampleIdx;
+extern volatile int audioSamples[10];
+extern volatile int averageAudio;
+extern volatile uint8_t audioSampleIdx;
 extern uint8_t audioMode;
 extern uint8_t audioSensitivity;
 extern bool audioAutoGain;
-extern int audioMinLevel;
-extern int audioMaxLevel;
+extern volatile int audioMinLevel;
+extern volatile int audioMaxLevel;
 
 // Timing arrays
 extern uint16_t IntervalTime[TOTAL_BODY_LEDS];
