@@ -12,7 +12,8 @@
 //  ==============================================================================
 //
 //  HARDWARE:
-//  - Controller: LOLIN C3 Mini (ESP32-C3)
+//  - Controller: LOLIN C3 Mini (ESP32-C3) OR LOLIN S3 Mini (ESP32-S3)
+//                ** AUTOMATIC BOARD DETECTION **
 //  - LEDs:       WS2812B (GRB color order)
 //  - Serial Baud Rate: 115200
 //
@@ -23,9 +24,16 @@
 //  - Eyes:         2 LEDs
 //  - Mouth:        80 LEDs in a 12-row matrix
 //
-//  PINOUT & RMT CHANNELS:
+//  PINOUT & RMT CHANNELS (Auto-configured based on board):
+//
+//  ESP32-C3 Mini:
 //  - RMT CH1 (Pin 3, 4, 5):  Body Panels (Right, Middle, Left)
 //  - RMT CH2 (Pin 6):        Mouth and Eyes (daisy-chained)
+//  - MIC_PIN (Pin 1):        Analog microphone input for audio reactivity
+//
+//  ESP32-S3 Mini:
+//  - RMT CH1 (Pin 5, 6, 7):  Body Panels (Right, Middle, Left)
+//  - RMT CH2 (Pin 8):        Mouth and Eyes (daisy-chained)
 //  - MIC_PIN (Pin 1):        Analog microphone input for audio reactivity
 //
 //  ==============================================================================
@@ -64,7 +72,8 @@
 //
 //  --- Thread Safety (FreeRTOS) ---
 //  * LED Mutex for safe multi-threading operations
-//  * Separate Audio Task on Core 0
+//  * Separate Audio Task on Core 0 (ESP32-S3 ONLY - automatically enabled)
+//  * Disabled on ESP32-C3 (single-core) to prevent LED flickering
 //
 //  --- System Monitoring ---
 //  * Health Check System with automatic error detection
@@ -155,6 +164,12 @@ void setup() {
     Serial.println(F("  Printed-Droid DJ Rex v5.0.0"));
     Serial.println(F("  Enhanced Edition"));
     Serial.println(F("=============================================="));
+    Serial.print(F("  Board: "));
+    Serial.println(BOARD_TYPE);
+    Serial.print(F("  Cores: "));
+    Serial.println(IS_DUAL_CORE ? "Dual-Core" : "Single-Core");
+    Serial.print(F("  FreeRTOS Audio: "));
+    Serial.println(ENABLE_FREERTOS_AUDIO ? "Enabled" : "Disabled");
     Serial.println(F("  Base: v3.1 + v4.2 Features"));
     Serial.println(F("  Build: " FIRMWARE_DATE));
     Serial.println(F("=============================================="));
@@ -205,7 +220,7 @@ void setup() {
         Serial.println(F("Startup sequence skipped"));
     }
 
-    // v5.0: Create audio task on Core 0
+    // v5.0: Create audio task on separate core (ESP32-S3 only)
     #if ENABLE_FREERTOS_AUDIO
     xTaskCreatePinnedToCore(
         audioTask,
@@ -214,8 +229,10 @@ void setup() {
         NULL,
         AUDIO_TASK_PRIORITY,
         &audioTaskHandle,
-        0  // Core 0
+        AUDIO_TASK_CORE
     );
+    Serial.print(F("Audio task created on Core "));
+    Serial.println(AUDIO_TASK_CORE);
     #endif
 
     Serial.println(F(""));
