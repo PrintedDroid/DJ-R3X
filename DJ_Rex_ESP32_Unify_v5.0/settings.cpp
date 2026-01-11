@@ -1,4 +1,5 @@
 #include "settings.h"
+#include "preset_manager.h"  // v5.0.1: For unified preset system
 
 void initSettings() {
     preferences.begin("djrex", false);
@@ -252,107 +253,53 @@ void resetToDefaults() {
     Serial.println(F("Factory reset complete"));
 }
 
+// v5.0.1: Legacy preset functions now map to v5 PresetManager
+// This provides backward compatibility while using the new extended preset system
 void saveUserPreset(uint8_t presetNum) {
     if (presetNum < 1 || presetNum > 3) return;
-    String presetKey = "preset" + String(presetNum);
-    
-    preferences.putUChar((presetKey + "_pattern").c_str(), currentPattern);
-    preferences.putUChar((presetKey + "_bright").c_str(), ledBrightness);
-    preferences.putUChar((presetKey + "_speed").c_str(), effectSpeed);
-    preferences.putUChar((presetKey + "_solid").c_str(), solidColorIndex);
-    preferences.putUChar((presetKey + "_eye").c_str(), eyeColorIndex);
-    preferences.putUChar((presetKey + "_mouth").c_str(), mouthPattern);
-    preferences.putUChar((presetKey + "_mouthCol").c_str(), mouthColorIndex);
-    preferences.putUChar((presetKey + "_audio").c_str(), audioMode);
-    preferences.putUChar((presetKey + "_side1").c_str(), sideColor1);
-    preferences.putUChar((presetKey + "_side2").c_str(), sideColor2);
-    preferences.putUChar((presetKey + "_side3").c_str(), sideColor3);
-    preferences.putUChar((presetKey + "_sideMode").c_str(), sideColorMode);
-    preferences.putUChar((presetKey + "_fadeSpd").c_str(), fadeSpeed);
-    preferences.putUChar((presetKey + "_conf1").c_str(), confettiColor1);
-    preferences.putUChar((presetKey + "_conf2").c_str(), confettiColor2);
-    
-    // Save eye flicker settings in presets
-    preferences.putBool((presetKey + "_eyeFlick").c_str(), eyeFlickerEnabled);
-    preferences.putUShort((presetKey + "_eyeFlickMin").c_str(), eyeFlickerMinTime);
-    preferences.putUShort((presetKey + "_eyeFlickMax").c_str(), eyeFlickerMaxTime);
-    preferences.putUChar((presetKey + "_eyeStaticBr").c_str(), eyeStaticBrightness);
 
-    // NEW: Save advanced settings in presets
-    preferences.putUChar((presetKey + "_eye2").c_str(), eyeColorIndex2);
-    preferences.putUChar((presetKey + "_eyeMode").c_str(), eyeMode);
-    preferences.putUChar((presetKey + "_mouthCol2").c_str(), mouthColorIndex2);
-    preferences.putUChar((presetKey + "_mouthSplit").c_str(), mouthSplitMode);
-    preferences.putUChar((presetKey + "_waveSpd").c_str(), waveSpeed);
-    preferences.putUChar((presetKey + "_pulseSpd").c_str(), pulseSpeed);
-    
-    preferences.putBytes((presetKey + "_blocks").c_str(), blockColors, 9);
-    preferences.putBool((presetKey + "_saved").c_str(), true);
-    
-    Serial.print(F("User preset "));
-    Serial.print(presetNum);
-    Serial.println(F(" saved"));
+    // Map legacy slots 1-3 directly to v5 PresetManager slots 1-3
+    // Generate legacy-style name for compatibility
+    char legacyName[PRESET_NAME_LENGTH];
+    snprintf(legacyName, PRESET_NAME_LENGTH, "User%d", presetNum);
+
+    if (presetManager.savePreset(presetNum, legacyName)) {
+        Serial.print(F("User preset "));
+        Serial.print(presetNum);
+        Serial.println(F(" saved"));
+    } else {
+        Serial.println(F("Failed to save user preset"));
+    }
 }
 
+// v5.0.1: Legacy load function now uses v5 PresetManager
 bool loadUserPreset(uint8_t presetNum) {
     if (presetNum < 1 || presetNum > 3) return false;
-    String presetKey = "preset" + String(presetNum);
-    
-    if (!preferences.getBool((presetKey + "_saved").c_str(), false)) {
+
+    // Map legacy slots 1-3 to v5 PresetManager slots 1-3
+    if (presetManager.loadPreset(presetNum)) {
+        Serial.print(F("User preset "));
+        Serial.print(presetNum);
+        Serial.println(F(" loaded"));
+        return true;
+    } else {
         Serial.print(F("User preset "));
         Serial.print(presetNum);
         Serial.println(F(" is empty"));
         return false;
     }
-    
-    currentPattern = preferences.getUChar((presetKey + "_pattern").c_str(), currentPattern);
-    ledBrightness = preferences.getUChar((presetKey + "_bright").c_str(), ledBrightness);
-    effectSpeed = preferences.getUChar((presetKey + "_speed").c_str(), effectSpeed);
-    solidColorIndex = preferences.getUChar((presetKey + "_solid").c_str(), solidColorIndex);
-    eyeColorIndex = preferences.getUChar((presetKey + "_eye").c_str(), eyeColorIndex);
-    mouthPattern = preferences.getUChar((presetKey + "_mouth").c_str(), mouthPattern);
-    mouthColorIndex = preferences.getUChar((presetKey + "_mouthCol").c_str(), mouthColorIndex);
-    audioMode = preferences.getUChar((presetKey + "_audio").c_str(), audioMode);
-    sideColor1 = preferences.getUChar((presetKey + "_side1").c_str(), sideColor1);
-    sideColor2 = preferences.getUChar((presetKey + "_side2").c_str(), sideColor2);
-    sideColor3 = preferences.getUChar((presetKey + "_side3").c_str(), sideColor3);
-    sideColorMode = preferences.getUChar((presetKey + "_sideMode").c_str(), sideColorMode);
-    fadeSpeed = preferences.getUChar((presetKey + "_fadeSpd").c_str(), fadeSpeed);
-    confettiColor1 = preferences.getUChar((presetKey + "_conf1").c_str(), confettiColor1);
-    confettiColor2 = preferences.getUChar((presetKey + "_conf2").c_str(), confettiColor2);
-    
-    // Load eye flicker settings from presets
-    eyeFlickerEnabled = preferences.getBool((presetKey + "_eyeFlick").c_str(), eyeFlickerEnabled);
-    eyeFlickerMinTime = preferences.getUShort((presetKey + "_eyeFlickMin").c_str(), eyeFlickerMinTime);
-    eyeFlickerMaxTime = preferences.getUShort((presetKey + "_eyeFlickMax").c_str(), eyeFlickerMaxTime);
-    eyeStaticBrightness = preferences.getUChar((presetKey + "_eyeStaticBr").c_str(), eyeStaticBrightness);
-
-    // NEW: Load advanced settings from presets
-    eyeColorIndex2 = preferences.getUChar((presetKey + "_eye2").c_str(), eyeColorIndex2);
-    eyeMode = preferences.getUChar((presetKey + "_eyeMode").c_str(), eyeMode);
-    mouthColorIndex2 = preferences.getUChar((presetKey + "_mouthCol2").c_str(), mouthColorIndex2);
-    mouthSplitMode = preferences.getUChar((presetKey + "_mouthSplit").c_str(), mouthSplitMode);
-    waveSpeed = preferences.getUChar((presetKey + "_waveSpd").c_str(), waveSpeed);
-    pulseSpeed = preferences.getUChar((presetKey + "_pulseSpd").c_str(), pulseSpeed);
-    
-    preferences.getBytes((presetKey + "_blocks").c_str(), blockColors, 9);
-    
-    FastLED.setBrightness(ledBrightness);
-    demoMode = false;
-    
-    Serial.print(F("User preset "));
-    Serial.print(presetNum);
-    Serial.println(F(" loaded"));
-    
-    return true;
 }
 
+// v5.0.1: Legacy delete function now uses v5 PresetManager
 void deleteUserPreset(uint8_t presetNum) {
     if (presetNum < 1 || presetNum > 3) return;
-    String presetKey = "preset" + String(presetNum);
-    preferences.putBool((presetKey + "_saved").c_str(), false);
-    
-    Serial.print(F("User preset "));
-    Serial.print(presetNum);
-    Serial.println(F(" deleted"));
+
+    // Map legacy slots 1-3 to v5 PresetManager slots 1-3
+    if (presetManager.deletePreset(presetNum)) {
+        Serial.print(F("User preset "));
+        Serial.print(presetNum);
+        Serial.println(F(" deleted"));
+    } else {
+        Serial.println(F("Failed to delete user preset"));
+    }
 }
