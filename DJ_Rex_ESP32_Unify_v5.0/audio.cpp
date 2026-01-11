@@ -1,6 +1,30 @@
 #include "audio.h"
 
+// v5.0.1: ADC DC-offset (calibrated at startup)
+int adcDCOffset = 2048; // Default, will be calibrated
+
+// v5.0.1: Calibrate ADC DC-offset by averaging mic readings
+void calibrateADCOffset() {
+    Serial.println(F("Calibrating ADC DC-offset..."));
+
+    long sum = 0;
+    const int samples = 200; // 200 samples over ~200ms
+
+    for (int i = 0; i < samples; i++) {
+        sum += analogRead(MIC_PIN);
+        delay(1); // 1ms between samples
+    }
+
+    adcDCOffset = sum / samples;
+
+    Serial.print(F("ADC DC-offset calibrated to: "));
+    Serial.println(adcDCOffset);
+}
+
 void initializeAudio() {
+    // v5.0.1: Calibrate DC offset first
+    calibrateADCOffset();
+
     // Initialize audio samples
     for (int i = 0; i < 10; i++) {
         audioSamples[i] = 0;
@@ -12,8 +36,8 @@ void initializeAudio() {
 int readAudioLevel() {
     if (millis() - lastAudioRead > 10) {
         int reading = analogRead(MIC_PIN);
-        // ESP32 ADC is 12-bit (0-4095), center at ~2048
-        audioLevel = abs(reading - 2048);
+        // v5.0.1: Use calibrated DC-offset instead of hardcoded 2048
+        audioLevel = abs(reading - adcDCOffset);
         lastAudioRead = millis();
         
         // Update auto gain if enabled

@@ -12,4 +12,8 @@ void updateAutoGain();
 // v5.0: FreeRTOS audio task function
 void updateAudio();
 
+// v5.0.1: ADC DC-offset calibration
+void calibrateADCOffset();
+extern int adcDCOffset;
+
 #endif
