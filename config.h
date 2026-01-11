@@ -11,6 +11,25 @@
 #define FIRMWARE_DATE "2025-11-30"
 
 // =============================================================================
+// BOARD DETECTION
+// =============================================================================
+// Automatically detect ESP32 board type and configure accordingly
+#if defined(CONFIG_IDF_TARGET_ESP32C3)
+    #define BOARD_TYPE "ESP32-C3 Mini"
+    #define IS_SINGLE_CORE true
+    #define IS_DUAL_CORE false
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+    #define BOARD_TYPE "ESP32-S3 Mini"
+    #define IS_SINGLE_CORE false
+    #define IS_DUAL_CORE true
+#else
+    #warning "Unknown ESP32 board - defaulting to ESP32-C3 configuration"
+    #define BOARD_TYPE "ESP32-C3 Mini (default)"
+    #define IS_SINGLE_CORE true
+    #define IS_DUAL_CORE false
+#endif
+
+// =============================================================================
 // HARDWARE CONFIGURATION (from v3.1)
 // =============================================================================
 #define NUM_LEDS_PER_PANEL 20
@@ -18,12 +37,31 @@
 #define NUM_MOUTH_LEDS 80
 #define TOTAL_BODY_LEDS 60
 
-// Pin definitions for ESP32-C3
-#define LED_PIN_RIGHT  3
-#define LED_PIN_MIDDLE 4
-#define LED_PIN_LEFT   5
-#define EYES_MOUTH_PIN 6
-#define MIC_PIN        1
+// =============================================================================
+// PIN DEFINITIONS - Board Specific
+// =============================================================================
+#if defined(CONFIG_IDF_TARGET_ESP32C3)
+    // Pin definitions for ESP32-C3 Mini
+    #define LED_PIN_RIGHT  3
+    #define LED_PIN_MIDDLE 4
+    #define LED_PIN_LEFT   5
+    #define EYES_MOUTH_PIN 6
+    #define MIC_PIN        1
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+    // Pin definitions for ESP32-S3 Mini
+    #define LED_PIN_RIGHT  5
+    #define LED_PIN_MIDDLE 6
+    #define LED_PIN_LEFT   7
+    #define EYES_MOUTH_PIN 8
+    #define MIC_PIN        1
+#else
+    // Default to ESP32-C3 pins
+    #define LED_PIN_RIGHT  3
+    #define LED_PIN_MIDDLE 4
+    #define LED_PIN_LEFT   5
+    #define EYES_MOUTH_PIN 6
+    #define MIC_PIN        1
+#endif
 
 // For compatibility
 #define EYES_PIN EYES_MOUTH_PIN
@@ -57,9 +95,15 @@
 // =============================================================================
 // v5.0 NEW: FREERTOS & THREAD SAFETY
 // =============================================================================
-// NOTE: Disabled by default on ESP32-C3 (single-core) to prevent LED flickering
-// Enable only on dual-core ESP32 chips
-#define ENABLE_FREERTOS_AUDIO false
+// Automatically enabled on dual-core ESP32-S3, disabled on single-core ESP32-C3
+// to prevent LED flickering on single-core chips
+#if IS_DUAL_CORE
+    #define ENABLE_FREERTOS_AUDIO true
+    #define AUDIO_TASK_CORE 0  // Run audio task on Core 0, main loop on Core 1
+#else
+    #define ENABLE_FREERTOS_AUDIO false
+#endif
+
 #define AUDIO_TASK_STACK_SIZE 4096
 #define AUDIO_TASK_PRIORITY 2
 #define AUDIO_SAMPLE_INTERVAL_MS 5
