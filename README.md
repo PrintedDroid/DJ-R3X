@@ -837,26 +837,33 @@ Located in `config.h`:
 
 ```
 DJ-R3X/
-├── DJ_Rex_v5.0.ino                # Main program (universal for C3/S3)
-├── config.h                       # Hardware configuration + auto board detection
-├── globals.h / globals.cpp        # Global variables
-├── patterns_body.h / .cpp         # 20 body patterns
-├── patterns_mouth.h / .cpp        # 15 mouth patterns
-├── eyes.h / eyes.cpp              # Eye control
-├── audio.h / audio.cpp            # Audio processing
-├── helpers.h / helpers.cpp        # Utility functions
-├── serial_commands.h / .cpp       # Serial command handler
-├── settings.h / settings.cpp      # EEPROM persistence
-├── demo.h / demo.cpp              # Demo mode
+├── DJ_Rex_ESP32_C3Mini_v3.1/          # Legacy ESP32-C3 specific firmware
+│   └── (v3.1 files)
 │
-│ # v5.0 New Modules
-├── event_logger.h / .cpp          # Event logging system
-├── preset_manager.h / .cpp        # 10-slot preset manager
-├── system_monitor.h / .cpp        # Health & memory monitoring
-├── pattern_manager.h / .cpp       # Pattern categorization
-├── startup_sequence.h / .cpp      # Boot animation
+├── DJ_Rex_ESP32_S3Mini_v3.1/          # Legacy ESP32-S3 specific firmware
+│   └── (v3.1 files)
 │
-└── README.md                      # This file
+├── DJ_Rex_ESP32_Unify_v5.0/           # ⭐ NEW: Universal firmware (C3/S3)
+│   ├── DJ_Rex_ESP32_Unify_v5.0.ino    # Main program (auto-detects board)
+│   ├── config.h                       # Hardware config + board detection
+│   ├── globals.h / globals.cpp        # Global variables
+│   ├── patterns_body.h / .cpp         # 20 body patterns
+│   ├── patterns_mouth.h / .cpp        # 15 mouth patterns
+│   ├── eyes.h / eyes.cpp              # Eye control
+│   ├── audio.h / audio.cpp            # Audio processing
+│   ├── helpers.h / helpers.cpp        # Utility functions
+│   ├── serial_commands.h / .cpp       # Serial command handler
+│   ├── settings.h / settings.cpp      # EEPROM persistence
+│   ├── demo.h / demo.cpp              # Demo mode
+│   │
+│   │ # v5.0 New Modules
+│   ├── event_logger.h / .cpp          # Event logging system
+│   ├── preset_manager.h / .cpp        # 10-slot preset manager
+│   ├── system_monitor.h / .cpp        # Health & memory monitoring
+│   ├── pattern_manager.h / .cpp       # Pattern categorization
+│   └── startup_sequence.h / .cpp      # Boot animation
+│
+└── README.md                          # This file
 ```
 
 ---
