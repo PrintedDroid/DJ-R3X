@@ -1,11 +1,15 @@
 # DJ-R3X LED Controller v5.0.0 "Enhanced Edition"
-**Advanced ESP32-C3 based LED controller for Star Wars DJ-R3X (Rex) animatronic builds**
+**Advanced ESP32-C3/S3 based LED controller for Star Wars DJ-R3X (Rex) animatronic builds**
+
+🎯 **Universal Firmware** - Automatically detects and configures for ESP32-C3 Mini OR ESP32-S3 Mini
 
 ---
 
 ## Overview
 
 This firmware brings your DJ-R3X (Rex from Star Wars: Galaxy's Edge) animatronic to life with stunning LED animations, audio reactivity, and professional control features. Designed for Printed-Droid builders who demand exceptional results.
+
+**NEW in v5.0:** Single universal firmware that automatically adapts to your ESP32 board - no manual configuration needed!
 
 ### Key Features
 
@@ -15,7 +19,7 @@ This firmware brings your DJ-R3X (Rex from Star Wars: Galaxy's Edge) animatronic
 - **20 Body Patterns** - Including Plasma, Fire, Twinkle, Rainbow, Matrix Rain, and more
 - **15 Mouth Patterns** - Talk, Smile, Audio Reactive, Heartbeat, Spectrum Analyzer, and more
 - **Audio Reactivity** - Real-time sound response with auto-gain and multiple routing modes
-- **FreeRTOS Multi-threading** - Dedicated audio task on Core 0 with thread-safe LED operations
+- **FreeRTOS Multi-threading** - Dedicated audio task on Core 0 (ESP32-S3 only, auto-enabled)
 - **System Monitoring** - Health checks, memory monitoring, and auto-recovery
 - **10 Preset Slots** - Save and recall complete configurations
 - **Playlist System** - Automated pattern sequences with smooth crossfade transitions
@@ -30,12 +34,22 @@ This firmware brings your DJ-R3X (Rex from Star Wars: Galaxy's Edge) animatronic
 
 | Component | Specification | Notes |
 |-----------|---------------|-------|
-| **Controller** | LOLIN C3 Mini (ESP32-C3) | 4MB Flash, WiFi/BLE capable |
+| **Controller** | LOLIN C3 Mini (ESP32-C3) **OR**<br>LOLIN S3 Mini (ESP32-S3) | 4MB Flash, WiFi/BLE capable<br>**Auto-detected by firmware** |
 | **Body LEDs** | WS2812B strips | 3 panels × 20 LEDs = 60 total |
 | **Eye LEDs** | WS2812B | 2 LEDs, daisy-chained with mouth |
 | **Mouth LEDs** | WS2812B matrix | 80 LEDs in 12-row configuration |
 | **Microphone** | Analog microphone module | For audio reactivity |
 | **Power Supply** | 5V 5A minimum | Calculate: (142 LEDs × 60mA) + controller |
+
+### Board Comparison
+
+| Feature | ESP32-C3 Mini | ESP32-S3 Mini |
+|---------|---------------|---------------|
+| **CPU Cores** | 1 (Single-Core) | 2 (Dual-Core) |
+| **FreeRTOS Audio Task** | Disabled (prevents flicker) | **Enabled** (better audio) |
+| **LED Pins** | 3, 4, 5, 6 | 5, 6, 7, 8 |
+| **Performance** | Good | **Excellent** |
+| **Recommended For** | Budget builds | **Best performance** |
 
 ### LED Panel Layout
 
@@ -74,6 +88,8 @@ Row 11:       ○ ○        (2 LEDs)
 
 ## Pin Configuration
 
+### ESP32-C3 Mini Pinout
+
 | GPIO Pin | Function | Description |
 |----------|----------|-------------|
 | **Pin 3** | LED_PIN_RIGHT | Right body panel (20 LEDs) |
@@ -82,8 +98,19 @@ Row 11:       ○ ○        (2 LEDs)
 | **Pin 6** | EYES_MOUTH_PIN | Eyes + Mouth daisy-chained (2 + 80 LEDs) |
 | **Pin 1** | MIC_PIN | Analog microphone input |
 
-### Wiring Diagram
+### ESP32-S3 Mini Pinout
 
+| GPIO Pin | Function | Description |
+|----------|----------|-------------|
+| **Pin 5** | LED_PIN_RIGHT | Right body panel (20 LEDs) |
+| **Pin 6** | LED_PIN_MIDDLE | Middle body panel (20 LEDs) |
+| **Pin 7** | LED_PIN_LEFT | Left body panel (20 LEDs) |
+| **Pin 8** | EYES_MOUTH_PIN | Eyes + Mouth daisy-chained (2 + 80 LEDs) |
+| **Pin 1** | MIC_PIN | Analog microphone input |
+
+### Wiring Diagrams
+
+**ESP32-C3 Mini:**
 ```
 ESP32-C3 Mini          LED Strips
 ┌──────────────┐
@@ -97,8 +124,23 @@ ESP32-C3 Mini          LED Strips
 └──────────────┘
 ```
 
+**ESP32-S3 Mini:**
+```
+ESP32-S3 Mini          LED Strips
+┌──────────────┐
+│          GP5 ├──────► Right Panel (20 LEDs)
+│          GP6 ├──────► Middle Panel (20 LEDs)
+│          GP7 ├──────► Left Panel (20 LEDs)
+│          GP8 ├──────► Eyes (2) ──► Mouth (80)
+│          GP1 ├──────► Microphone (Analog)
+│          5V  ├──────► LED VCC (5V)
+│          GND ├──────► LED GND + Mic GND
+└──────────────┘
+```
+
 **Important Notes:**
-- Eyes and mouth are daisy-chained on a single data line (Pin 6)
+- **Board-specific pins:** C3 uses pins 3,4,5,6 / S3 uses pins 5,6,7,8 (auto-configured)
+- Eyes and mouth are daisy-chained on a single data line (Pin 6 on C3, Pin 8 on S3)
 - Eyes come first (LEDs 0-1), then mouth (LEDs 2-81)
 - Use adequate power injection for 142 LEDs
 - Add 300-500Ω resistor on data lines for signal integrity
@@ -128,6 +170,8 @@ ESP32-C3 Mini          LED Strips
      - **Preferences** (built-in)
 
 3. **Board Configuration:**
+
+   **For ESP32-C3 Mini:**
    | Setting | Value |
    |---------|-------|
    | Board | LOLIN C3 Mini |
@@ -137,15 +181,28 @@ ESP32-C3 Mini          LED Strips
    | Partition Scheme | Default |
    | Upload Speed | 921600 |
 
+   **For ESP32-S3 Mini:**
+   | Setting | Value |
+   |---------|-------|
+   | Board | LOLIN S3 Mini |
+   | USB CDC On Boot | Enabled |
+   | CPU Frequency | 240MHz |
+   | Flash Size | 4MB |
+   | Partition Scheme | Default 4MB with spiffs |
+   | Upload Speed | 921600 |
+   | USB Mode | Hardware CDC and JTAG |
+
 4. **Upload:**
-   - Connect ESP32-C3 via USB
+   - Connect your ESP32 board via USB
    - Select correct COM port
    - Click Upload
+   - **The firmware automatically detects your board type on first boot!**
 
 ### PlatformIO Setup
 
-Create `platformio.ini`:
+Create `platformio.ini` for your board:
 
+**For ESP32-C3 Mini:**
 ```ini
 [env:lolin_c3_mini]
 platform = espressif32
@@ -156,6 +213,20 @@ lib_deps =
     fastled/FastLED@^3.9.0
 build_flags =
     -DARDUINO_USB_CDC_ON_BOOT=1
+```
+
+**For ESP32-S3 Mini:**
+```ini
+[env:lolin_s3_mini]
+platform = espressif32
+board = lolin_s3_mini
+framework = arduino
+monitor_speed = 115200
+lib_deps =
+    fastled/FastLED@^3.9.0
+build_flags =
+    -DARDUINO_USB_CDC_ON_BOOT=1
+    -DARDUINO_USB_MODE=1
 ```
 
 ---
@@ -254,10 +325,10 @@ The audio system automatically adjusts sensitivity based on ambient sound levels
 
 ### Technical Specifications
 
-- **Sample Rate:** 200 Hz (5ms interval via FreeRTOS task)
+- **Sample Rate:** 200 Hz (5ms interval via FreeRTOS task on S3, or main loop on C3)
 - **Resolution:** 12-bit ADC
 - **Processing:** Running average with 10-sample window
-- **Core Assignment:** Audio task runs on Core 0
+- **Core Assignment (S3 only):** Audio task runs on Core 0, main loop on Core 1
 
 ---
 
@@ -630,14 +701,28 @@ restart                 # Restart the system
 
 ## v5.0 New Features
 
-### FreeRTOS Thread Safety
+### Universal Board Support ⭐
 
+**Automatic board detection and configuration:**
+- Single firmware works on both ESP32-C3 Mini and ESP32-S3 Mini
+- Automatic pin configuration based on detected board
+- FreeRTOS audio task automatically enabled on dual-core S3
+- Board type displayed on startup
+
+### FreeRTOS Thread Safety (ESP32-S3 Only)
+
+**Dual-core optimization for ESP32-S3:**
 - **LED Mutex:** Prevents race conditions during LED updates
-- **Audio Task:** Dedicated task on Core 0 for consistent audio sampling
+- **Audio Task:** Dedicated task on Core 0 for consistent audio sampling at 200 Hz
 - **Thread-Safe Updates:** All LED operations protected by semaphores
+- **Performance:** Main loop on Core 1, audio on Core 0 for optimal performance
+
+**Automatic behavior:**
+- **ESP32-S3:** FreeRTOS enabled, uses dual cores
+- **ESP32-C3:** FreeRTOS disabled (single-core, prevents LED flickering)
 
 ```cpp
-#if ENABLE_FREERTOS_AUDIO
+#if ENABLE_FREERTOS_AUDIO  // Auto true on S3, false on C3
 if (xSemaphoreTake(ledMutex, pdMS_TO_TICKS(LED_MUTEX_TIMEOUT_MS)) == pdTRUE) {
     FastLED.show();
     xSemaphoreGive(ledMutex);
@@ -702,14 +787,28 @@ Animated boot sequence with phases:
 Located in `config.h`:
 
 ```cpp
+// Board Detection (automatic)
+#if defined(CONFIG_IDF_TARGET_ESP32C3)
+    #define BOARD_TYPE "ESP32-C3 Mini"
+    #define IS_DUAL_CORE false
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+    #define BOARD_TYPE "ESP32-S3 Mini"
+    #define IS_DUAL_CORE true
+#endif
+
 // Hardware
 #define NUM_LEDS_PER_PANEL 20
 #define NUM_EYES 2
 #define NUM_MOUTH_LEDS 80
 #define TOTAL_BODY_LEDS 60
 
-// FreeRTOS
-#define ENABLE_FREERTOS_AUDIO true
+// FreeRTOS (auto-configured based on board)
+#if IS_DUAL_CORE
+    #define ENABLE_FREERTOS_AUDIO true  // S3 only
+    #define AUDIO_TASK_CORE 0
+#else
+    #define ENABLE_FREERTOS_AUDIO false  // C3
+#endif
 #define AUDIO_TASK_STACK_SIZE 4096
 #define AUDIO_TASK_PRIORITY 2
 #define AUDIO_SAMPLE_INTERVAL_MS 5
@@ -737,9 +836,9 @@ Located in `config.h`:
 ## File Structure
 
 ```
-DJ_Rex_ESP32C3Mini_v5.0/
-├── DJ_Rex_ESP32C3Mini_v5.0.ino    # Main program
-├── config.h                       # Hardware configuration
+DJ-R3X/
+├── DJ_Rex_v5.0.ino                # Main program (universal for C3/S3)
+├── config.h                       # Hardware configuration + auto board detection
 ├── globals.h / globals.cpp        # Global variables
 ├── patterns_body.h / .cpp         # 20 body patterns
 ├── patterns_mouth.h / .cpp        # 15 mouth patterns
@@ -825,6 +924,12 @@ DJ_Rex_ESP32C3Mini_v5.0/
 
 **Major Feature Release**
 
+#### Universal Board Support ⭐
+- **Single firmware for ESP32-C3 Mini AND ESP32-S3 Mini**
+- Automatic board detection and pin configuration
+- FreeRTOS automatically enabled on S3 (dual-core)
+- Board type displayed on startup serial output
+
 #### New Patterns
 - **Body:** Plasma, Fire, Twinkle (patterns 17-19)
 - **Mouth:** Matrix, Heartbeat, Spectrum (patterns 12-14)
@@ -836,10 +941,11 @@ DJ_Rex_ESP32C3Mini_v5.0/
 - **Pattern Manager:** Categorized pattern navigation
 - **Startup Sequence:** Animated boot animation
 
-#### FreeRTOS Integration
-- Dedicated audio task on Core 0
-- LED mutex for thread safety
+#### FreeRTOS Integration (ESP32-S3)
+- Dedicated audio task on Core 0 (S3 only)
+- LED mutex for thread safety (S3 only)
 - Improved timing consistency
+- Disabled on C3 to prevent LED flickering
 
 #### Auto-Recovery
 - Safe mode on critical errors
