@@ -1,7 +1,7 @@
-# DJ-R3X LED Controller v5.0.0 "Enhanced Edition"
+# DJ-R3X LED Controller v5.1.0 "Line-In Edition"
 **Advanced ESP32-C3/S3 based LED controller for Star Wars DJ-R3X (Rex) animatronic builds**
 
-🎯 **Universal Firmware** - Automatically detects and configures for ESP32-C3 Mini OR ESP32-S3 Mini
+**Universal Firmware** - Automatically detects and configures for ESP32-C3 Mini OR ESP32-S3 Mini
 
 ---
 
@@ -9,7 +9,7 @@
 
 This firmware brings your DJ-R3X (Rex from Star Wars: Galaxy's Edge) animatronic to life with stunning LED animations, audio reactivity, and professional control features. Designed for Printed-Droid builders who demand exceptional results.
 
-**NEW in v5.0:** Single universal firmware that automatically adapts to your ESP32 board - no manual configuration needed!
+**NEW in v5.1:** Line-In audio input support! Connect directly to a mixer, audio interface, or media player for clean, noise-free audio-reactive lighting. Switchable via serial menu between Microphone and Line-In modes.
 
 ### Key Features
 
@@ -323,12 +323,176 @@ The audio system automatically adjusts sensitivity based on ambient sound levels
 - Decays over time for adaptation
 - Configurable sensitivity (1-10)
 
+### Audio Input Modes (v5.1)
+
+| Mode | Name | Command | Description |
+|------|------|---------|-------------|
+| 0 | Microphone | `audioinput mic` | Default - uses onboard analog microphone |
+| 1 | Line-In | `audioinput linein` | Direct audio feed from mixer/player (requires adapter) |
+
+When switching to Line-In, the firmware automatically adjusts sensitivity for the stronger signal level. The setting is saved to flash.
+
 ### Technical Specifications
 
 - **Sample Rate:** 200 Hz (5ms interval via FreeRTOS task on S3, or main loop on C3)
 - **Resolution:** 12-bit ADC
 - **Processing:** Running average with 10-sample window
 - **Core Assignment (S3 only):** Audio task runs on Core 0, main loop on Core 1
+
+---
+
+## Audio-to-Light: How It Works
+
+This section explains the complete signal flow from audio input to LED output for users who want to understand or tune the audio-reactive behavior.
+
+### Signal Flow
+
+```
+Audio Source (Mic or Line-In)
+        |
+        v
+  [ADC 12-bit Read: 0-4095]
+        |
+        v
+  [DC Offset Removal: abs(reading - calibratedOffset)]
+        |
+        v
+  [10-Sample Running Average]
+        |
+        v
+  [Sensitivity Scaling: map(audio, 0, range, 0, sensitivity*100)]
+        |     range = 2048 (Mic) or 4095 (Line-In)
+        v
+  [Auto-Gain Threshold Adjustment]
+        |
+        v
+  [Audio Mode Routing]
+        |
+        +---> Body Patterns: audioSync, audioVUMeter
+        +---> Mouth Patterns: mouthAudioReactive, mouthVUMeter, mouthSpectrum
+        |
+        v
+  [FastLED.show() -> 142 LEDs]
+```
+
+### ADC Calibration
+
+On startup, the firmware samples the ADC input 200 times to determine the DC offset (the "silence" baseline). This calibrated value is used instead of a hardcoded midpoint, which improves accuracy across different hardware setups.
+
+### Audio Processing Pipeline
+
+1. **Raw Read** (`readAudioLevel`): Reads the analog pin every 10ms, subtracts the calibrated DC offset, and takes the absolute value to get the amplitude.
+
+2. **Averaging** (`processAudioLevel`): Maintains a 10-sample circular buffer. The running average smooths out transient spikes for stable VU meter behavior.
+
+3. **Sensitivity Mapping**: The raw amplitude is scaled based on the user-configured sensitivity (1-10) and the input mode. Line-In uses a wider mapping range (4095) than Microphone (2048) because line-level signals have higher amplitude.
+
+4. **Auto-Gain**: When enabled, the system tracks minimum and maximum audio levels over time and dynamically adjusts the threshold to the midpoint. This means the LEDs respond consistently whether the music is quiet or loud.
+
+### Audio-Reactive Body Patterns
+
+| Pattern | Index | Mapping | Behavior |
+|---------|-------|---------|----------|
+| **Audio Sync** | 9 | `audio -> numLEDs (0-8 side LEDs)` | Side LEDs light up proportionally. Blocks activate at >70% level. White sparkles at >80%. |
+| **Audio VU Meter** | 15 | `averageAudio -> vuLevel (0-8)` | Classic green/yellow/red VU bar. White block peak indicators at >80%. |
+
+### Audio-Reactive Mouth Patterns
+
+| Pattern | Index | Mapping | Behavior |
+|---------|-------|---------|----------|
+| **Audio Reactive** | 3 | `audio -> activeRows (0-12)` | Mouth opens from center outward. Hue shifts from green (quiet) to red (loud). |
+| **VU Meter Horiz** | 8 | `audio -> level (0-4 per side)` | Horizontal bars expand from center of each row. |
+| **VU Meter Vert** | 9 | `audio -> level (0-12 rows)` | Vertical bar fills rows from bottom to top. |
+| **Spectrum** | 14 | `audio + random variation -> 8 bands` | Simulated 8-band spectrum analyzer with green-to-red gradient. |
+
+**Note:** The Spectrum pattern simulates frequency bands by adding small random variation to the single amplitude value. It does not perform actual FFT/frequency analysis. For true frequency separation, an external FFT module would be needed.
+
+### Tuning Tips
+
+- **Sensitivity too high?** LEDs always maxed out → lower with `audiosens 3`
+- **Sensitivity too low?** LEDs barely respond → raise with `audiosens 8`
+- **Erratic response?** Enable auto-gain: `autogain on`
+- **Want manual control?** Disable auto-gain and set threshold: `autogain off` then `audiothreshold 150`
+- **Line-In too hot?** The firmware handles this automatically, but you can fine-tune with `audiosens 1-3`
+
+---
+
+## Line-In Audio Input (v5.1)
+
+Instead of using the onboard microphone (which picks up ambient noise), you can feed a clean audio signal directly from a mixer, DJ controller, media player, or audio interface into the ESP32's ADC pin.
+
+### Why Use Line-In?
+
+| | Microphone | Line-In |
+|---|-----------|---------|
+| **Signal quality** | Picks up ambient noise | Clean, direct signal |
+| **Consistency** | Varies with distance/placement | Consistent level |
+| **Setup** | Plug and play | Requires adapter circuit |
+| **Best for** | Casual use, demos | DJ setups, events, permanent installations |
+
+### Required Hardware Adapter
+
+Line-level audio signals are AC (they swing positive and negative around 0V, typically ±1V for consumer gear). The ESP32 ADC can only read **0-3.3V** - negative voltages will damage it. A simple bias circuit shifts the signal into the safe range.
+
+**Components needed (< $1):**
+
+| Component | Value | Purpose |
+|-----------|-------|---------|
+| Coupling capacitor | 10µF electrolytic | Blocks DC from source device |
+| Bias resistor 1 | 100kΩ | Forms voltage divider |
+| Bias resistor 2 | 100kΩ | Forms voltage divider |
+| Protection resistor (optional) | 10kΩ | Limits current to ADC |
+
+**Schematic:**
+
+```
+                       3.3V
+                        |
+                      [100kΩ]
+                        |
+Audio In ──[10µF Cap]──-+──[10kΩ]──> MIC_PIN (GPIO 1)
+                        |
+                      [100kΩ]
+                        |
+                       GND
+```
+
+**How it works:**
+1. The **coupling capacitor** (10µF) blocks any DC offset from the audio source
+2. The **voltage divider** (2x 100kΩ) creates a DC bias at ~1.65V (midpoint of 3.3V range)
+3. The audio signal now swings around 1.65V (e.g., 0.65V to 2.65V) - safely within the ADC range
+4. The **protection resistor** (10kΩ, optional) limits current if the signal is too hot
+
+**Important notes:**
+- Use a **mono** signal or pick left/right channel. The ESP32 has one ADC input.
+- For **stereo-to-mono** mixing, add a 10kΩ resistor on each channel before combining.
+- Consumer line-level is ~1V peak. Professional (+4dBu) is ~1.7V peak - both work with this circuit.
+- The firmware's **auto-gain** and **DC offset calibration** handle the rest automatically.
+
+### Software Setup
+
+```bash
+# Switch to Line-In mode
+audioinput linein
+
+# Verify the setting
+audioinput
+
+# Set up audio-reactive patterns
+S 15                    # Body: Audio VU Meter
+mouth 14                # Mouth: Spectrum analyzer
+audio 4                 # Full audio reactivity
+
+# Save to flash
+save
+```
+
+When you switch to Line-In mode, the firmware automatically:
+- Adjusts the ADC mapping range for stronger line-level signals
+- Lowers default sensitivity from 5 to 3
+- Recalibrates DC offset on next boot
+
+To switch back: `audioinput mic`
 
 ---
 
@@ -387,9 +551,11 @@ Connect via Serial Monitor at **115200 baud**.
 
 | Command | Description |
 |---------|-------------|
-| `audio <0-4>` | Set audio mode |
-| `sensitivity <1-10>` | Set audio sensitivity |
-| `threshold <value>` | Set audio threshold |
+| `audiomode <0-4>` | Set audio routing mode |
+| `audioinput mic` | Switch to microphone input (default) |
+| `audioinput linein` | Switch to line-in input (v5.1) |
+| `audiosens <1-10>` | Set audio sensitivity |
+| `audiothreshold <50-500>` | Set audio threshold manually |
 | `autogain on/off` | Toggle auto-gain |
 
 ### Brightness Control
@@ -926,6 +1092,16 @@ DJ-R3X/
 ---
 
 ## Version History
+
+### v5.1.0 "Line-In Edition" (2026-02-21)
+
+**New Feature: Line-In Audio Input**
+
+- **Line-In support:** Connect directly to a mixer, DJ controller, or media player via a simple adapter circuit
+- **`audioinput` command:** Switch between Microphone and Line-In modes via serial menu
+- **Automatic sensitivity adjustment:** Firmware adapts mapping range and sensitivity defaults per input mode
+- **Persistent setting:** Audio input mode is saved to flash and survives reboots
+- **Full documentation:** Audio-to-Light signal flow, Line-In adapter schematic, and tuning guide added to README
 
 ### v5.0.0 "Enhanced Edition" (2025-11-30)
 
